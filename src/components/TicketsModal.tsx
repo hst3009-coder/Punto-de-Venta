@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { Sale, Product, PaymentMethod, StoreIdentity, CartItem, Employee, Closure, CustomerRefund } from '../types';
+import { Sale, Product, PaymentMethod, StoreIdentity, CartItem, Employee, Closure, CustomerRefund, CreditNote, DashboardConfig } from '../types';
 import { 
   X, Search, Calendar, Trash2, Printer, Check, Undo2, 
   CreditCard, Wallet, QrCode, Coins, ArrowRight, Receipt, 
-  Edit, HelpCircle, RefreshCw, AlertTriangle
+  Edit, HelpCircle, RefreshCw, AlertTriangle, Tag
 } from 'lucide-react';
 import { firestoreService } from '../lib/firebase';
 import { getSaleTimestamp } from '../lib/dates';
+import { ReceiptTemplate } from './ReceiptTemplate';
 
 interface TicketsModalProps {
   isOpen: boolean;
@@ -21,6 +22,9 @@ interface TicketsModalProps {
   closures: Closure[];
   customerRefunds?: CustomerRefund[];
   onAddCustomerRefund?: (refund: CustomerRefund) => void;
+  creditNotes?: CreditNote[];
+  onAddCreditNote?: (note: CreditNote) => void;
+  dashboardConfig?: DashboardConfig;
 }
 
 export const TicketsModal: React.FC<TicketsModalProps> = ({
@@ -36,11 +40,15 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
   closures,
   customerRefunds = [],
   onAddCustomerRefund,
+  creditNotes = [],
+  onAddCreditNote,
+  dashboardConfig,
 }) => {
   // Active states
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [refundMethodChoice, setRefundMethodChoice] = useState<'cash' | 'credit_note'>('cash');
+  const [createdCreditNote, setCreatedCreditNote] = useState<CreditNote | null>(null);
   
   // Entire Invoice Cancellation state
   const [isCancelling, setIsCancelling] = useState(false);
@@ -405,7 +413,7 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
       console.error('Error saving item return record in Firestore:', err);
     }
 
-    // 3. Create CustomerRefund record
+    // 3. Create CustomerRefund record & optional CreditNote
     const isCreditSale = Boolean(
       (selectedSale.paymentMethod === 'credit' ||
        selectedSale.isCredit ||
@@ -415,13 +423,44 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
 
     const refundAmount = returningItem.product.price * returningItemQty;
     const now = new Date();
+    const refundId = crypto.randomUUID();
+
+    let createdCn: CreditNote | null = null;
+    let refundMethod: 'cash' | 'credit_note' | 'credit_reduction' = isCreditSale ? 'credit_reduction' : refundMethodChoice;
+
+    if (!isCreditSale && refundMethodChoice === 'credit_note') {
+      let code = '';
+      let exists = true;
+      while (exists) {
+        code = crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase();
+        exists = creditNotes.some(cn => cn.code === code);
+      }
+
+      createdCn = {
+        id: crypto.randomUUID(),
+        code,
+        originalAmount: refundAmount,
+        remainingBalance: refundAmount,
+        status: 'active',
+        createdFromRefundId: refundId,
+        employeeId: currentEmployee?.id,
+        employeeName: currentEmployee?.name || clerkName,
+        createdAt: now.toISOString(),
+      };
+
+      if (onAddCreditNote) {
+        onAddCreditNote(createdCn);
+      }
+      setCreatedCreditNote(createdCn);
+    }
 
     const refundRecord: CustomerRefund = {
-      id: crypto.randomUUID(),
+      id: refundId,
       saleId: selectedSale.id,
       ticketNumber: selectedSale.ticketNumber,
       amount: refundAmount,
-      method: isCreditSale ? 'credit_reduction' : 'cash',
+      method: refundMethod,
+      creditNoteId: createdCn ? createdCn.id : undefined,
       customerId: isCreditSale ? selectedSale.customerId : undefined,
       reason: returningItemReason.trim(),
       date: now.toLocaleDateString('es-DO'),
@@ -745,250 +784,13 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
 
                 {/* Receipt Thermal container */}
                 <div className="flex justify-center">
-                  <div 
-                    id="thermal-ticket"
-                    className="bg-white border border-slate-200 p-6 rounded-2xl w-full max-w-[340px] shadow-sm relative overflow-hidden font-mono text-xs text-slate-800"
-                  >
-                    {/* Visual Stamp overlay */}
-                    {selectedSale.isCancelled && (
-                      <div className="absolute inset-0 flex items-center justify-center rotate-12 pointer-events-none select-none z-10">
-                        <div className="border-4 border-rose-500 text-rose-500 text-xl font-black px-4 py-2 uppercase tracking-widest rounded-xl bg-white/95 opacity-80 shadow-md">
-                          Anulado / Devuelto
-                        </div>
-                      </div>
-                    )}
-
-                    {activeReceiptView === 'original' ? (
-                      /* ORIGINAL RECEIPT COMPONENT */
-                      <div className="space-y-4">
-                        <div className="text-center space-y-1">
-                          <h4 className="font-sans font-black text-sm text-slate-900 tracking-tight">
-                            {storeIdentity.name || 'MI NEGOCIO'}
-                          </h4>
-                          {storeIdentity.slogan && <p className="text-[9px] text-slate-500 font-sans italic">{storeIdentity.slogan}</p>}
-                          {storeIdentity.address && <p className="text-[9px] text-slate-400 font-sans leading-none">{storeIdentity.address}</p>}
-                          {storeIdentity.phone && <p className="text-[9px] text-slate-400 font-sans">Tel: {storeIdentity.phone}</p>}
-                        </div>
-
-                        <div className="border-t border-dashed border-slate-300 pt-3 text-[10px] space-y-1">
-                          <div className="flex justify-between">
-                            <span>Factura:</span>
-                            <span className="font-bold">#{selectedSale.ticketNumber}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Fecha:</span>
-                            <span>{selectedSale.date}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Cajero:</span>
-                            <span>{clerkName}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Método:</span>
-                            <span className="font-extrabold capitalize">{selectedSale.paymentMethod}</span>
-                          </div>
-                        </div>
-
-                        {/* Items Table */}
-                        <table className="w-full text-left text-[10px] border-t border-b border-dashed border-slate-300 py-3">
-                          <thead>
-                            <tr className="border-b border-dashed border-slate-200">
-                              <th className="py-1">Art.</th>
-                              <th className="py-1 text-center">Cant.</th>
-                              <th className="py-1 text-right">Precio</th>
-                              <th className="py-1 text-right">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedSale.items.map((item, index) => {
-                              // Calculate how many of this item have been returned
-                              const returnedQty = (selectedSale as any).returnedItems
-                                ?.filter((r: any) => r.productId === item.product.id)
-                                ?.reduce((sum: number, r: any) => sum + r.quantity, 0) || 0;
-                              
-                              const isFullyReturned = returnedQty >= item.quantity;
-                              const isPartiallyReturned = returnedQty > 0 && returnedQty < item.quantity;
-
-                              return (
-                                <tr key={index} className="align-top border-b border-dashed border-slate-100/50 last:border-0">
-                                  <td className="py-1.5 pr-2">
-                                    <span className={`${isFullyReturned ? 'line-through text-slate-400' : ''}`}>
-                                      {item.product.name}
-                                    </span>
-                                    {isFullyReturned && (
-                                      <span className="text-[8px] font-bold text-rose-500 block">Devolución total</span>
-                                    )}
-                                    {isPartiallyReturned && (
-                                      <span className="text-[8px] font-bold text-amber-600 block">Devolución parcial: {returnedQty} dev.</span>
-                                    )}
-                                  </td>
-                                  <td className="py-1.5 text-center">
-                                    {isPartiallyReturned ? (
-                                      <span>
-                                        <span className="text-slate-400 line-through mr-1">{item.quantity}</span>
-                                        <span className="font-bold">{item.quantity - returnedQty}</span>
-                                      </span>
-                                    ) : (
-                                      <span className={isFullyReturned ? 'line-through text-slate-400 font-bold' : 'font-bold'}>
-                                        {item.quantity}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="py-1.5 text-right">${item.product.price.toFixed(2)}</td>
-                                  <td className="py-1.5 text-right">
-                                    {isFullyReturned ? (
-                                      <span className="line-through text-slate-400">${(item.product.price * item.quantity).toFixed(2)}</span>
-                                    ) : isPartiallyReturned ? (
-                                      <span>
-                                        <span className="line-through text-slate-400 mr-1">${(item.product.price * item.quantity).toFixed(2)}</span>
-                                        <span className="font-bold">${(item.product.price * (item.quantity - returnedQty)).toFixed(2)}</span>
-                                      </span>
-                                    ) : (
-                                      <span>${(item.product.price * item.quantity).toFixed(2)}</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-
-                        {/* Totals */}
-                        <div className="space-y-1 text-[11px]">
-                          {(() => {
-                            let sSubtotal = 0;
-                            let sTax = 0;
-                            selectedSale.items.forEach(item => {
-                              const itemTotal = item.product.price * item.quantity;
-                              if (item.product.taxExempt) {
-                                sSubtotal += itemTotal;
-                              } else {
-                                const itemSub = itemTotal / 1.18;
-                                sSubtotal += itemSub;
-                                sTax += (itemTotal - itemSub);
-                              }
-                            });
-                            return (
-                              <>
-                                <div className="flex justify-between">
-                                  <span>Subtotal:</span>
-                                  <span>${sSubtotal.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>ITBIS (18%):</span>
-                                  <span>${sTax.toFixed(2)}</span>
-                                </div>
-                              </>
-                            );
-                          })()}
-                          <div className="flex justify-between text-xs font-black text-slate-900 border-t border-dashed border-slate-300 pt-2">
-                            <span>TOTAL ORIGINAL:</span>
-                            <span>${selectedSale.total.toFixed(2)}</span>
-                          </div>
-
-                          {/* Returns subtotal subtraction if applicable */}
-                          {getRefundTotal(selectedSale) > 0 && (
-                            <>
-                              <div className="flex justify-between text-xs font-extrabold text-rose-600">
-                                <span>TOTAL DEVUELTO:</span>
-                                <span>-${getRefundTotal(selectedSale).toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-xs font-black text-emerald-600 border-t border-dashed border-slate-200 pt-1.5">
-                                <span>TOTAL FINAL NETO:</span>
-                                <span>${(selectedSale.total - getRefundTotal(selectedSale)).toFixed(2)}</span>
-                              </div>
-                            </>
-                          )}
-
-                          <div className="flex justify-between pt-1 border-t border-dashed border-slate-200 text-[10px]">
-                            <span>Pagó con:</span>
-                            <span>${selectedSale.amountPaid.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-[10px]">
-                            <span>Cambio devuelto:</span>
-                            <span>${selectedSale.change.toFixed(2)}</span>
-                          </div>
-                        </div>
-
-                        {/* Footer info inside ticket */}
-                        <div className="border-t border-dashed border-slate-300 pt-3 text-center text-[9px] text-slate-400 italic space-y-1">
-                          <p>¡Gracias por su preferencia!</p>
-                          <p>Factura emitida a través del POS Inteligente</p>
-                        </div>
-                      </div>
-                    ) : (
-                      /* RETURN TICKET COMPONENT */
-                      <div className="space-y-4">
-                        <div className="text-center space-y-1.5 border-b border-dashed border-slate-300 pb-3">
-                          <h4 className="font-sans font-black text-sm text-rose-600 tracking-tight uppercase">
-                            TKT DE DEVOLUCIÓN
-                          </h4>
-                          <p className="text-[9px] text-slate-500 font-sans italic">{storeIdentity.name || 'MI NEGOCIO'}</p>
-                          <p className="text-[9px] text-slate-400 font-mono">Factura Origen: #{selectedSale.ticketNumber}</p>
-                          <p className="text-[9px] text-slate-400 font-mono">Fecha Reg: {new Date().toLocaleDateString()}</p>
-                        </div>
-
-                        <div className="text-[10px] space-y-1 text-slate-600">
-                          <p className="font-extrabold text-slate-800">JUSTIFICACIÓN / MOTIVO:</p>
-                          <div className="bg-slate-50 p-2 rounded-lg border border-dashed border-slate-200 text-[9px] italic text-slate-700 leading-snug">
-                            {selectedSale.isCancelled 
-                              ? selectedSale.cancelReason || 'Anulación completa de la factura.'
-                              : (selectedSale as any).returnedItems?.[(selectedSale as any).returnedItems.length - 1]?.reason || 'Devolución de artículo.'}
-                          </div>
-                        </div>
-
-                        {/* Returned items */}
-                        <div className="space-y-2">
-                          <p className="text-[10px] font-extrabold text-slate-800 border-b border-dashed border-slate-200 pb-1">ARTÍCULOS DEVUELTOS:</p>
-                          <table className="w-full text-left text-[10px]">
-                            <thead>
-                              <tr className="border-b border-dashed border-slate-100 text-slate-500">
-                                <th className="py-1">Producto</th>
-                                <th className="py-1 text-center">Cant</th>
-                                <th className="py-1 text-right">Precio</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedSale.isCancelled && !(selectedSale as any).returnedItems ? (
-                                selectedSale.items.map((item, idx) => (
-                                  <tr key={idx} className="border-b border-dashed border-slate-100/30">
-                                    <td className="py-1 text-slate-800 font-medium">{item.product.name}</td>
-                                    <td className="py-1 text-center font-bold text-rose-600">{item.quantity}</td>
-                                    <td className="py-1 text-right">${item.product.price.toFixed(2)}</td>
-                                  </tr>
-                                ))
-                              ) : (
-                                ((selectedSale as any).returnedItems || []).map((item: any, idx: number) => (
-                                  <tr key={idx} className="border-b border-dashed border-slate-100/30">
-                                    <td className="py-1 text-slate-800 font-medium">
-                                      {item.productName}
-                                      <span className="text-[8px] text-slate-400 block font-normal">{item.date}</span>
-                                    </td>
-                                    <td className="py-1 text-center font-bold text-rose-600">{item.quantity}</td>
-                                    <td className="py-1 text-right">${item.price.toFixed(2)}</td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {/* Return Total highlight */}
-                        <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-center space-y-1">
-                          <span className="text-[9px] font-black text-rose-600 uppercase tracking-wider block">MONTO TOTAL A FAVOR DEL CLIENTE</span>
-                          <span className="text-lg font-black text-rose-700 block">${getRefundTotal(selectedSale).toFixed(2)}</span>
-                          <span className="text-[8px] font-bold text-slate-500 block">Reembolsar según método original ({selectedSale.paymentMethod})</span>
-                        </div>
-
-                        <div className="border-t border-dashed border-slate-300 pt-3 text-center text-[9px] text-slate-400 italic space-y-1">
-                          <p>Punto de Venta Inteligente</p>
-                          <p>Firma del Cliente para vale de reembolso</p>
-                          <div className="border-b border-slate-200 h-10 w-40 mx-auto mt-4" />
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
+                  <ReceiptTemplate
+                    sale={selectedSale}
+                    clerkName={clerkName}
+                    storeIdentity={storeIdentity}
+                    ticketConfig={dashboardConfig?.ticketConfig}
+                    viewType={activeReceiptView}
+                  />
                 </div>
 
                 {/* --- OPERATIONS / EDITING PANEL --- */}
@@ -1275,12 +1077,14 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
 
                   <button
                     type="button"
-                    disabled
-                    className="p-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 text-xs font-bold flex flex-col items-center justify-center gap-0.5 cursor-not-allowed opacity-75"
-                    title="Próximamente"
+                    onClick={() => setRefundMethodChoice('credit_note')}
+                    className={`p-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      refundMethodChoice === 'credit_note'
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-800 ring-2 ring-indigo-500/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
                   >
-                    <span className="font-black text-[11px]">🏷️ Nota de Crédito</span>
-                    <span className="text-[8px] bg-slate-200 text-slate-600 px-1 py-0.2 rounded font-black uppercase">Próximamente</span>
+                    <span>🏷️ Nota de Crédito</span>
                   </button>
                 </div>
               </div>
@@ -1320,6 +1124,53 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
         </div>
       )}
 
+      {/* Modal de Confirmación de Nota de Crédito */}
+      {createdCreditNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-200 text-center space-y-6 animate-scale-up">
+            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto border border-indigo-100 shadow-xs">
+              <Receipt className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-extrabold text-slate-800">Nota de Crédito Emitida</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Nota de Crédito: <strong className="text-indigo-600 font-mono tracking-wider font-extrabold">{createdCreditNote.code}</strong> — Guarda este código, es necesario para usarlo después.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-3">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Código de Canje</span>
+              <div className="text-3xl font-black font-mono tracking-widest text-indigo-700 bg-white border border-slate-200 rounded-xl py-2 shadow-2xs select-all">
+                {createdCreditNote.code}
+              </div>
+              <div className="pt-2 border-t border-slate-200 flex justify-between text-xs font-bold text-slate-700">
+                <span>Monto Disponible:</span>
+                <span className="font-mono text-indigo-700 font-black">RD$ {createdCreditNote.originalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl border border-slate-200 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-slate-600" />
+                <span>Imprimir Nota</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCreatedCreditNote(null)}
+                className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-100 transition-all cursor-pointer"
+              >
+                Entendido / Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

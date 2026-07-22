@@ -1,6 +1,43 @@
 import React, { useState } from 'react';
-import { StoreIdentity, EmployeePermissions, DashboardConfig } from '../types';
-import { X, Check, Database, Store, Users, Calendar, Plus, Trash2, Percent, ToggleLeft, ToggleRight } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { useAlert } from '../context/AlertContext';
+import { getCustomerDebt } from '../lib/customerDebt';
+import { getPayableBalance } from '../lib/payableDebt';
+import {
+  StoreIdentity,
+  EmployeePermissions,
+  DashboardConfig,
+  TicketConfig,
+  Product,
+  Customer,
+  Sale,
+  CustomerPayment,
+  CustomerRefund,
+  AccountPayable,
+  PayablePayment,
+  CreditNote,
+  SupplierCreditNote,
+  Movement,
+  SupplierReturn,
+  Closure
+} from '../types';
+import {
+  X,
+  Check,
+  Database,
+  Store,
+  Users,
+  Calendar,
+  Plus,
+  Trash2,
+  Percent,
+  ToggleLeft,
+  ToggleRight,
+  Printer,
+  FileSpreadsheet,
+  Download,
+  Loader2
+} from 'lucide-react';
 import { EmployeesView } from './EmployeesView';
 
 interface AdminDrawerProps {
@@ -12,6 +49,18 @@ interface AdminDrawerProps {
   permissions: EmployeePermissions;
   dashboardConfig: DashboardConfig;
   onUpdateDashboardConfig: (config: DashboardConfig) => void;
+  products?: Product[];
+  customers?: Customer[];
+  salesHistory?: Sale[];
+  customerPayments?: CustomerPayment[];
+  customerRefunds?: CustomerRefund[];
+  payables?: AccountPayable[];
+  payablePayments?: PayablePayment[];
+  creditNotes?: CreditNote[];
+  supplierCreditNotes?: SupplierCreditNote[];
+  movements?: Movement[];
+  supplierReturns?: SupplierReturn[];
+  closures?: Closure[];
 }
 
 export const AdminDrawer: React.FC<AdminDrawerProps> = ({
@@ -23,15 +72,192 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
   permissions,
   dashboardConfig,
   onUpdateDashboardConfig,
+  products = [],
+  customers = [],
+  salesHistory = [],
+  customerPayments = [],
+  customerRefunds = [],
+  payables = [],
+  payablePayments = [],
+  creditNotes = [],
+  supplierCreditNotes = [],
+  movements = [],
+  supplierReturns = [],
+  closures = [],
 }) => {
+  const { showAlert } = useAlert();
   const [activeTab, setActiveTab] = useState<'identity' | 'dashboard' | 'database' | 'employees'>(
     permissions.editStoreSettings ? 'identity' : 
-    permissions.accessDatabaseTools ? 'database' : 'employees'
+    (permissions.accessDatabaseTools || permissions.exportFullBackup) ? 'database' : 'employees'
   );
 
   const [newPaymentTypeLabel, setNewPaymentTypeLabel] = useState('');
   const [newBankName, setNewBankName] = useState('');
   const [newAccountLabel, setNewAccountLabel] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportFullBackup = () => {
+    if (isExporting) return;
+    setIsExporting(true);
+
+    setTimeout(async () => {
+      try {
+        const wb = XLSX.utils.book_new();
+
+        // 1. "Productos": mismo contenido que el respaldo ya existente en InventoryTab
+        const productsData = (products || []).map((p) => ({
+          ID: p.id,
+          Código: p.code || p.barcode || p.id,
+          SKU: p.sku || '',
+          Nombre: p.name,
+          Categoría: p.category,
+          Precio_Venta: p.price,
+          Costo: p.cost || 0,
+          Stock_Actual: p.stock,
+          Proveedor: p.provider || '',
+        }));
+        const wsProducts = XLSX.utils.json_to_sheet(productsData.length > 0 ? productsData : [{ Mensaje: 'Sin productos' }]);
+        XLSX.utils.book_append_sheet(wb, wsProducts, 'Productos');
+
+        // 2. "Clientes y Créditos": lista de clientes con deuda actual, límite de crédito, datos contacto
+        const customersData = (customers || []).map((c) => {
+          const currentDebt = getCustomerDebt(c.id, salesHistory || [], customerPayments || [], customers || [], customerRefunds || []);
+          return {
+            ID: c.id,
+            Nombre: c.name,
+            'Cédula / RNC': c.rnc || c.taxId || '',
+            Teléfono: c.phone || '',
+            Email: c.email || '',
+            Dirección: c.address || '',
+            'Límite de Crédito': c.creditLimit || 0,
+            'Deuda Actual': currentDebt,
+            'Deuda Inicial': c.openingDebt || 0,
+          };
+        });
+        const wsCustomers = XLSX.utils.json_to_sheet(customersData.length > 0 ? customersData : [{ Mensaje: 'Sin clientes' }]);
+        XLSX.utils.book_append_sheet(wb, wsCustomers, 'Clientes y Créditos');
+
+        // 3. "Cuentas por Pagar": lista de AccountPayable con saldo pendiente
+        const payablesData = (payables || []).map((p) => {
+          const remainingBalance = getPayableBalance(p.id, payables || [], payablePayments || []);
+          return {
+            ID: p.id,
+            Proveedor: p.supplierName || '',
+            'No. Factura / Ref': p.invoiceNumber || '',
+            'Monto Total': p.totalAmount || 0,
+            'Saldo Pendiente': remainingBalance,
+            'Fecha Vencimiento': p.dueDate || '',
+            Estado: p.status || '',
+            Notas: p.notes || '',
+          };
+        });
+        const wsPayables = XLSX.utils.json_to_sheet(payablesData.length > 0 ? payablesData : [{ Mensaje: 'Sin cuentas por pagar' }]);
+        XLSX.utils.book_append_sheet(wb, wsPayables, 'Cuentas por Pagar');
+
+        // 4. "Notas de Crédito (Clientes)": lista completa de CreditNote
+        const creditNotesData = (creditNotes || []).map((cn) => ({
+          ID: cn.id,
+          Código: cn.code,
+          'Monto Original': cn.originalAmount,
+          'Saldo Disponible': cn.remainingBalance,
+          Estado: cn.status,
+          Cliente: cn.customerName || '',
+          Empleado: cn.employeeName || '',
+          'Fecha Emisión': cn.createdAt ? new Date(cn.createdAt).toLocaleString('es-DO') : '',
+          'Motivo Anulación': cn.voidReason || '',
+          'Fecha Anulación': cn.voidedAt ? new Date(cn.voidedAt).toLocaleString('es-DO') : '',
+          'Anulado Por': cn.voidedByEmployeeName || '',
+        }));
+        const wsCreditNotes = XLSX.utils.json_to_sheet(creditNotesData.length > 0 ? creditNotesData : [{ Mensaje: 'Sin notas de crédito' }]);
+        XLSX.utils.book_append_sheet(wb, wsCreditNotes, 'Notas de Crédito (Clientes)');
+
+        // 5. "Notas de Crédito (Proveedores)": lista completa de SupplierCreditNote
+        const supplierCreditNotesData = (supplierCreditNotes || []).map((scn) => ({
+          ID: scn.id,
+          Proveedor: scn.supplierName,
+          'Monto Original': scn.originalAmount,
+          'Saldo Disponible': scn.remainingBalance,
+          Motivo: scn.reason,
+          Estado: scn.status,
+          Fecha: scn.createdAt ? new Date(scn.createdAt).toLocaleString('es-DO') : '',
+        }));
+        const wsSupplierCreditNotes = XLSX.utils.json_to_sheet(supplierCreditNotesData.length > 0 ? supplierCreditNotesData : [{ Mensaje: 'Sin notas de crédito de proveedores' }]);
+        XLSX.utils.book_append_sheet(wb, wsSupplierCreditNotes, 'Notas de Crédito (Proveedores)');
+
+        // 6. "Egresos": lista de Movement tipo 'out' de los últimos 90 días
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+        const egresosData = (movements || [])
+          .filter((m) => {
+            if (m.type !== 'out') return false;
+            const dateStr = m.createdAt || m.date;
+            if (!dateStr) return true;
+            return new Date(dateStr) >= ninetyDaysAgo;
+          })
+          .map((m) => ({
+            ID: m.id,
+            Concepto: m.description || m.reason || '',
+            Monto: m.amount || 0,
+            Categoría: m.category || '',
+            'Método de Pago': m.paymentMethod || '',
+            Empleado: m.employeeName || '',
+            Fecha: (m.createdAt || m.date) ? new Date(m.createdAt || m.date).toLocaleString('es-DO') : '',
+          }));
+        const wsEgresos = XLSX.utils.json_to_sheet(egresosData.length > 0 ? egresosData : [{ Mensaje: 'Sin egresos en los últimos 90 días' }]);
+        XLSX.utils.book_append_sheet(wb, wsEgresos, 'Egresos');
+
+        // 7. "Devoluciones a Proveedor": lista de SupplierReturn
+        const supplierReturnsData = (supplierReturns || []).map((sr) => ({
+          ID: sr.id,
+          Proveedor: sr.supplierName || '',
+          'Monto Total': sr.totalAmount || 0,
+          Motivo: sr.reason || '',
+          Empleado: sr.employeeName || '',
+          Fecha: sr.createdAt ? new Date(sr.createdAt).toLocaleString('es-DO') : '',
+        }));
+        const wsSupplierReturns = XLSX.utils.json_to_sheet(supplierReturnsData.length > 0 ? supplierReturnsData : [{ Mensaje: 'Sin devoluciones a proveedor' }]);
+        XLSX.utils.book_append_sheet(wb, wsSupplierReturns, 'Devoluciones a Proveedor');
+
+        // 8. "Cierres de Turno": lista de Closure de los últimos 90 días
+        const closuresData = (closures || [])
+          .filter((cl) => {
+            const dateStr = cl.closedAt || cl.openedAt || cl.createdAt;
+            if (!dateStr) return true;
+            return new Date(dateStr) >= ninetyDaysAgo;
+          })
+          .map((cl) => ({
+            ID: cl.id,
+            Cajero: cl.employeeName || '',
+            'Efectivo Apertura': cl.openingCash || 0,
+            'Efectivo Esperado': cl.expectedCash || 0,
+            'Efectivo Real': cl.actualCash || 0,
+            Diferencia: cl.difference || 0,
+            'Ventas Efectivo': cl.cashSales || 0,
+            'Ventas Tarjeta': cl.cardSales || 0,
+            'Ventas Transferencia': cl.transferSales || 0,
+            'Ventas Crédito': cl.creditSales || 0,
+            'Total Ventas': cl.totalSales || 0,
+            'Fecha Apertura': cl.openedAt ? new Date(cl.openedAt).toLocaleString('es-DO') : '',
+            'Fecha Cierre': cl.closedAt ? new Date(cl.closedAt).toLocaleString('es-DO') : '',
+          }));
+        const wsClosures = XLSX.utils.json_to_sheet(closuresData.length > 0 ? closuresData : [{ Mensaje: 'Sin cierres de turno en los últimos 90 días' }]);
+        XLSX.utils.book_append_sheet(wb, wsClosures, 'Cierres de Turno');
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        const filename = `Respaldo_Negocio_${dateStr}.xlsx`;
+
+        XLSX.writeFile(wb, filename);
+
+        await showAlert('Respaldo Completado', 'El respaldo completo del negocio ha sido generado y descargado con éxito.', 'success');
+      } catch (err) {
+        console.error('Error generating full business backup:', err);
+        await showAlert('Error de Exportación', 'Ocurrió un error al generar el respaldo. Por favor intente nuevamente.', 'error');
+      } finally {
+        setIsExporting(false);
+      }
+    }, 100);
+  };
   
   if (!isOpen) return null;
 
@@ -85,7 +311,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
               <span>Dashboard</span>
             </button>
           )}
-          {permissions.accessDatabaseTools && (
+          {(permissions.accessDatabaseTools || permissions.exportFullBackup) && (
             <button
               onClick={() => setActiveTab('database')}
               className={`pb-2 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -285,6 +511,16 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
               { id: 'credit', label: 'Crédito', active: true },
             ];
             const bankAccounts = dashboardConfig?.bankAccounts ?? [];
+            const ticketConfig: TicketConfig = dashboardConfig?.ticketConfig ?? {
+              width: '80mm',
+              fontFamily: 'mono',
+              showLogo: true,
+              showSlogan: true,
+              showTaxBreakdown: true,
+              showEmployeeName: true,
+              showFooterMessage: true,
+              footerMessageText: '¡Gracias por su compra!',
+            };
 
             const handleTogglePaymentType = (id: string) => {
               const updated = paymentTypes.map((pt) => {
@@ -597,47 +833,218 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* --- CONFIGURACIÓN DE TICKET --- */}
+                <div className="space-y-4 pt-3 border-t border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Printer className="w-4 h-4 text-indigo-600" />
+                    <label className="text-xs font-bold text-slate-800">Configuración de Ticket</label>
+                  </div>
+
+                  {/* Ancho & Tipografía */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600 block">Ancho de Papel</label>
+                      <select
+                        value={ticketConfig.width}
+                        onChange={(e) => onUpdateDashboardConfig({
+                          ...dashboardConfig,
+                          ticketConfig: { ...ticketConfig, width: e.target.value as '58mm' | '80mm' }
+                        })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
+                      >
+                        <option value="80mm">80mm (Estándar POS)</option>
+                        <option value="58mm">58mm (Compacto)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600 block">Tipografía</label>
+                      <select
+                        value={ticketConfig.fontFamily}
+                        onChange={(e) => onUpdateDashboardConfig({
+                          ...dashboardConfig,
+                          ticketConfig: { ...ticketConfig, fontFamily: e.target.value as 'mono' | 'sans' | 'serif' }
+                        })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
+                      >
+                        <option value="mono">Monospace (Térmico)</option>
+                        <option value="sans">Sans-Serif (Limpio)</option>
+                        <option value="serif">Serif (Clásico)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Checkboxes para elementos mostrados */}
+                  <div className="space-y-2 pt-1">
+                    <label className="text-[11px] font-bold text-slate-600 block">Elementos a Mostrar</label>
+                    <div className="space-y-2 bg-white border border-slate-200 rounded-xl p-3">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ticketConfig.showLogo}
+                          onChange={(e) => onUpdateDashboardConfig({
+                            ...dashboardConfig,
+                            ticketConfig: { ...ticketConfig, showLogo: e.target.checked }
+                          })}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                        />
+                        <span>Mostrar Logo</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ticketConfig.showSlogan}
+                          onChange={(e) => onUpdateDashboardConfig({
+                            ...dashboardConfig,
+                            ticketConfig: { ...ticketConfig, showSlogan: e.target.checked }
+                          })}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                        />
+                        <span>Mostrar Slogan</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ticketConfig.showTaxBreakdown}
+                          onChange={(e) => onUpdateDashboardConfig({
+                            ...dashboardConfig,
+                            ticketConfig: { ...ticketConfig, showTaxBreakdown: e.target.checked }
+                          })}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                        />
+                        <span>Desglosar Subtotal / ITBIS</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ticketConfig.showEmployeeName}
+                          onChange={(e) => onUpdateDashboardConfig({
+                            ...dashboardConfig,
+                            ticketConfig: { ...ticketConfig, showEmployeeName: e.target.checked }
+                          })}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                        />
+                        <span>Mostrar Cajero ("Atendido por")</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ticketConfig.showFooterMessage}
+                          onChange={(e) => onUpdateDashboardConfig({
+                            ...dashboardConfig,
+                            ticketConfig: { ...ticketConfig, showFooterMessage: e.target.checked }
+                          })}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                        />
+                        <span>Mostrar Mensaje de Pie</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Texto del Mensaje al Pie */}
+                  {ticketConfig.showFooterMessage && (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600 block">Mensaje de Pie de Ticket</label>
+                      <input
+                        type="text"
+                        value={ticketConfig.footerMessageText}
+                        onChange={(e) => onUpdateDashboardConfig({
+                          ...dashboardConfig,
+                          ticketConfig: { ...ticketConfig, footerMessageText: e.target.value }
+                        })}
+                        placeholder="ej. ¡Gracias por su compra!"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })()}
 
           {activeTab === 'database' && (
             <div className="space-y-6">
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-center space-y-4">
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-sm">
-                  <Database className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-800 text-sm">Centro de Datos Firestore</h4>
-                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed max-w-sm mx-auto">
-                    Accede a la consola de administración en tiempo real de las 14 colecciones autorizadas de la base de datos (ventas, cierres, mermas, clientes, etc.).
+              {permissions.exportFullBackup && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center gap-2.5 pb-3 border-b border-slate-200">
+                    <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+                      <FileSpreadsheet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-sm">Respaldo Completo del Negocio</h4>
+                      <p className="text-[11px] text-slate-500 font-medium">Exporta toda la información operativa y financiera en un libro de Excel (.xlsx) multihaja.</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Genera una hoja individual por cada conjunto de datos: Productos, Clientes y Créditos, Cuentas por Pagar, Notas de Crédito (Clientes y Proveedores), Egresos (últimos 90 días), Devoluciones a Proveedor y Cierres de Turno (últimos 90 días).
                   </p>
+
+                  <button
+                    type="button"
+                    onClick={handleExportFullBackup}
+                    disabled={isExporting}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm active:scale-98"
+                  >
+                    {isExporting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Generando Respaldo en Excel...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        <span>Descargar Respaldo Completo del Negocio (.xlsx)</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose(); // Close the admin drawer first
-                    onOpenDatabase(); // Open the Database Control Center!
-                  }}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 mx-auto"
-                >
-                  <Database className="w-3.5 h-3.5" /> Abrir Centro de Datos
-                </button>
-              </div>
-              
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
-                <h5 className="text-xs font-black uppercase text-slate-400 tracking-wider">Estado de Conexión</h5>
-                <div className="flex items-center justify-between text-xs font-semibold">
-                  <span className="text-slate-500">Servidor Firestore:</span>
-                  <span className="text-emerald-600 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Activo (Live)
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200/60 pt-2.5">
-                  <span className="text-slate-500">Proyecto de Base de Datos:</span>
-                  <span className="text-slate-700 font-mono text-[10px]">ai-studio-puntodeventa</span>
-                </div>
-              </div>
+              )}
+
+              {permissions.accessDatabaseTools && (
+                <>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-center space-y-4">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-sm">
+                      <Database className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-sm">Centro de Datos Firestore</h4>
+                      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed max-w-sm mx-auto">
+                        Accede a la consola de administración en tiempo real de las 14 colecciones autorizadas de la base de datos (ventas, cierres, mermas, clientes, etc.).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose(); // Close the admin drawer first
+                        onOpenDatabase(); // Open the Database Control Center!
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 mx-auto"
+                    >
+                      <Database className="w-3.5 h-3.5" /> Abrir Centro de Datos
+                    </button>
+                  </div>
+                  
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
+                    <h5 className="text-xs font-black uppercase text-slate-400 tracking-wider">Estado de Conexión</h5>
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-slate-500">Servidor Firestore:</span>
+                      <span className="text-emerald-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Activo (Live)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200/60 pt-2.5">
+                      <span className="text-slate-500">Proyecto de Base de Datos:</span>
+                      <span className="text-slate-700 font-mono text-[10px]">ai-studio-puntodeventa</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, PaymentMethod, PaymentBreakdownItem, Sale, StoreIdentity, Customer, CustomerPayment, DashboardConfig, CustomerRefund } from '../types';
-import { X, Check, CreditCard, Wallet, QrCode, Coins, Printer, RefreshCw, Users, Layers, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { CartItem, PaymentMethod, PaymentBreakdownItem, Sale, StoreIdentity, Customer, CustomerPayment, DashboardConfig, CustomerRefund, CreditNote } from '../types';
+import { X, Check, CreditCard, Wallet, QrCode, Coins, Printer, RefreshCw, Users, Layers, Plus, Trash2, AlertCircle, Tag } from 'lucide-react';
 import { roundCents } from '../lib/money';
 import { useAlert } from '../context/AlertContext';
 import { getCustomerDebt } from '../lib/customerDebt';
+import { firestoreService } from '../lib/firebase';
+import { ReceiptTemplate } from './ReceiptTemplate';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -19,6 +21,8 @@ interface PaymentModalProps {
   sales?: Sale[];
   customerPayments?: CustomerPayment[];
   customerRefunds?: CustomerRefund[];
+  creditNotes?: CreditNote[];
+  onUpdateCreditNote?: (note: CreditNote) => void;
   dashboardConfig?: DashboardConfig;
 }
 
@@ -36,6 +40,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   sales = [],
   customerPayments = [],
   customerRefunds = [],
+  creditNotes = [],
+  onUpdateCreditNote,
   dashboardConfig,
 }) => {
   const { showAlert, showConfirm } = useAlert();
@@ -48,6 +54,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [mixedBreakdown, setMixedBreakdown] = useState<PaymentBreakdownItem[]>([
     { id: '1', method: 'cash', amount: total }
   ]);
+
+  // Credit note state for mixed breakdown
+  const [creditNoteInputs, setCreditNoteInputs] = useState<Record<string, string>>({});
+  const [creditNoteErrors, setCreditNoteErrors] = useState<Record<string, string>>({});
+  const [creditNoteValidations, setCreditNoteValidations] = useState<Record<string, { code: string; creditNote: CreditNote; remainingBalance: number }>>({});
 
   const cashInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -94,7 +105,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const activeBankAccounts = (dashboardConfig?.bankAccounts ?? []).filter(ba => ba.active);
 
   const mixedTotalEntered = roundCents(
-    mixedBreakdown.reduce((sum, item) => sum + (item.method !== 'credit_note' ? (Number(item.amount) || 0) : 0), 0)
+    mixedBreakdown.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
   );
 
   const mixedChangeAmount = roundCents(Math.max(0, mixedTotalEntered - total));
@@ -104,6 +115,66 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       .filter(item => item.method === 'cash')
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
   );
+
+  const handleValidateCreditNoteRow = (rowId: string) => {
+    const rawCode = creditNoteInputs[rowId] || '';
+    const code = rawCode.trim().toUpperCase();
+
+    if (!code) {
+      setCreditNoteErrors(prev => ({ ...prev, [rowId]: 'Ingrese el código de la nota de crédito' }));
+      return;
+    }
+
+    const found = (creditNotes || []).find(cn => cn.code.toUpperCase() === code);
+
+    if (!found) {
+      setCreditNoteErrors(prev => ({ ...prev, [rowId]: 'Código no encontrado' }));
+      setCreditNoteValidations(prev => {
+        const next = { ...prev };
+        delete next[rowId];
+        return next;
+      });
+      return;
+    }
+
+    if (found.status === 'voided') {
+      setCreditNoteErrors(prev => ({ ...prev, [rowId]: 'Esta nota de crédito fue anulada y ya no es válida' }));
+      setCreditNoteValidations(prev => {
+        const next = { ...prev };
+        delete next[rowId];
+        return next;
+      });
+      return;
+    }
+
+    if (found.status === 'depleted' || found.remainingBalance <= 0) {
+      setCreditNoteErrors(prev => ({ ...prev, [rowId]: 'Esta nota ya no tiene saldo disponible' }));
+      setCreditNoteValidations(prev => {
+        const next = { ...prev };
+        delete next[rowId];
+        return next;
+      });
+      return;
+    }
+
+    // Valid note!
+    setCreditNoteErrors(prev => ({ ...prev, [rowId]: '' }));
+    setCreditNoteValidations(prev => ({
+      ...prev,
+      [rowId]: { code: found.code, creditNote: found, remainingBalance: found.remainingBalance }
+    }));
+
+    // Auto calculate suggested amount to cover remaining missing total
+    const currentOtherSum = mixedBreakdown
+      .filter(r => r.id !== rowId)
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const missingToCover = Math.max(0, total - currentOtherSum);
+    const defaultAmount = roundCents(Math.min(found.remainingBalance, missingToCover));
+
+    setMixedBreakdown(prev =>
+      prev.map(r => r.id === rowId ? { ...r, creditNoteCode: found.code, amount: defaultAmount } : r)
+    );
+  };
 
   const isConfirmDisabled = 
     (paymentMethod === 'cash' && !isValidAmount) ||
@@ -187,14 +258,34 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         }
       }
 
-      const hasCreditNote = mixedBreakdown.some(r => r.method === 'credit_note');
-      if (hasCreditNote) {
-        await showAlert(
-          'Nota de Crédito No Disponible',
-          'El método Nota de Crédito estará disponible próximamente.',
-          'info'
-        );
-        return;
+      const creditNoteRows = mixedBreakdown.filter(r => r.method === 'credit_note');
+      for (const row of creditNoteRows) {
+        const validation = creditNoteValidations[row.id];
+        if (!validation || !validation.creditNote) {
+          await showAlert(
+            'Nota de Crédito No Validada',
+            'Debe ingresar y validar un código de nota de crédito válido en el desglose de pago mixto.',
+            'warning'
+          );
+          return;
+        }
+        const applied = Number(row.amount) || 0;
+        if (applied <= 0) {
+          await showAlert(
+            'Monto Inválido',
+            'El monto a aplicar de la nota de crédito debe ser mayor a 0.',
+            'warning'
+          );
+          return;
+        }
+        if (applied > validation.remainingBalance) {
+          await showAlert(
+            'Monto Excedido',
+            `El monto a aplicar (RD$ ${applied.toFixed(2)}) excede el saldo disponible de la nota de crédito (RD$ ${validation.remainingBalance.toFixed(2)}).`,
+            'warning'
+          );
+          return;
+        }
       }
 
       const missingTransferBank = mixedBreakdown.some(r => r.method === 'transfer' && !r.bankAccountId);
@@ -229,9 +320,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       total,
       paymentMethod,
       paymentBreakdown: paymentMethod === 'mixed'
-        ? mixedBreakdown
-            .filter(r => r.method !== 'credit_note')
-            .map(r => ({ ...r, amount: Number(r.amount) || 0 }))
+        ? mixedBreakdown.map(r => ({ ...r, amount: Number(r.amount) || 0 }))
         : undefined,
       amountPaid: paymentMethod === 'cash' ? amountPaid : (paymentMethod === 'mixed' ? mixedTotalEntered : (paymentMethod === 'credit' ? 0 : total)),
       change: paymentMethod === 'cash' ? change : (paymentMethod === 'mixed' ? mixedChangeAmount : 0),
@@ -247,6 +336,34 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     // 1. Submit sale
     onSubmitSale(saleData);
+
+    // 2. Deduct credit note balances if used
+    if (paymentMethod === 'mixed') {
+      const creditNoteRows = mixedBreakdown.filter(r => r.method === 'credit_note');
+      for (const row of creditNoteRows) {
+        const val = creditNoteValidations[row.id];
+        if (val?.creditNote) {
+          const applied = roundCents(Number(row.amount) || 0);
+          const currentNote = (creditNotes || []).find(cn => cn.id === val.creditNote.id) || val.creditNote;
+          const newRemaining = roundCents(Math.max(0, currentNote.remainingBalance - applied));
+          const updatedNote: CreditNote = {
+            ...currentNote,
+            remainingBalance: newRemaining,
+            status: newRemaining === 0 ? 'depleted' : 'active',
+          };
+
+          try {
+            await firestoreService.setDocWithId('creditNotes', updatedNote.id, updatedNote);
+          } catch (err) {
+            console.error('Error updating CreditNote balance in Firestore:', err);
+          }
+
+          if (onUpdateCreditNote) {
+            onUpdateCreditNote(updatedNote);
+          }
+        }
+      }
+    }
 
     // 2. Print if requested
     if (shouldPrint) {
@@ -520,24 +637,25 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                             {/* Amount field */}
                             <div className="relative flex-1">
                               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
-                              {row.method === 'credit_note' ? (
-                                <input
-                                  type="text"
-                                  disabled
-                                  value="0.00"
-                                  className="w-full pl-6 pr-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-400 cursor-not-allowed"
-                                />
-                              ) : (
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={row.amount || ''}
-                                  onChange={(e) => handleUpdateBreakdownRow(row.id, 'amount', parseFloat(e.target.value) || 0)}
-                                  placeholder="0.00"
-                                  className="w-full pl-6 pr-3 py-1.5 bg-white border border-slate-250 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                              )}
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max={row.method === 'credit_note' ? creditNoteValidations[row.id]?.remainingBalance : undefined}
+                                value={row.amount || ''}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  if (row.method === 'credit_note') {
+                                    const maxVal = creditNoteValidations[row.id]?.remainingBalance;
+                                    const finalVal = maxVal !== undefined ? Math.min(val, maxVal) : val;
+                                    handleUpdateBreakdownRow(row.id, 'amount', finalVal);
+                                  } else {
+                                    handleUpdateBreakdownRow(row.id, 'amount', val);
+                                  }
+                                }}
+                                placeholder="0.00"
+                                className="w-full pl-6 pr-3 py-1.5 bg-white border border-slate-250 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
                             </div>
 
                             {/* Remove Row Button */}
@@ -558,9 +676,57 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
                           {/* Extra requirements per method */}
                           {row.method === 'credit_note' && (
-                            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 p-2 rounded-lg text-amber-800 text-[11px] font-semibold">
-                              <span>Próximamente</span>
-                              <span className="text-[10px] text-amber-600">(El módulo de notas de crédito se construirá posteriormente)</span>
+                            <div className="pl-7 space-y-2 pt-1 border-t border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="CÓDIGO NOTA (ej. 8 CARACTERES)"
+                                  value={creditNoteInputs[row.id] ?? row.creditNoteCode ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value.toUpperCase();
+                                    setCreditNoteInputs(prev => ({ ...prev, [row.id]: val }));
+                                    handleUpdateBreakdownRow(row.id, 'creditNoteCode', val);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleValidateCreditNoteRow(row.id);
+                                    }
+                                  }}
+                                  className="flex-1 px-2.5 py-1.5 bg-slate-50 border border-slate-250 rounded-lg text-xs font-mono font-black text-indigo-700 tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500 uppercase placeholder-slate-400 placeholder:font-sans placeholder:normal-case placeholder:font-normal"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleValidateCreditNoteRow(row.id)}
+                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                                >
+                                  Validar
+                                </button>
+                              </div>
+
+                              {creditNoteErrors[row.id] && (
+                                <p className="text-[11px] font-bold text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-200 flex items-center gap-1.5 animate-fade-in">
+                                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                  {creditNoteErrors[row.id]}
+                                </p>
+                              )}
+
+                              {creditNoteValidations[row.id] && (
+                                <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg text-emerald-800 text-[11px] space-y-0.5 animate-fade-in">
+                                  <div className="flex justify-between items-center font-extrabold">
+                                    <span className="flex items-center gap-1 text-emerald-900">
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                      Nota Válida: {creditNoteValidations[row.id].code}
+                                    </span>
+                                    <span className="font-mono text-emerald-900">
+                                      RD$ {creditNoteValidations[row.id].remainingBalance.toFixed(2)} disponible
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-emerald-700">
+                                    Ingrese el monto a aplicar de esta nota en la casilla superior (máx. RD$ {creditNoteValidations[row.id].remainingBalance.toFixed(2)}).
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -763,193 +929,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             <span className="text-xs font-bold text-slate-400 block mb-3 uppercase tracking-wider">Vista Previa del Ticket</span>
             
             {/* The thermal ticket card */}
-            <div id="thermal-ticket" className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm font-mono text-xs text-slate-800 leading-relaxed relative overflow-hidden">
-              {/* Zigzag cut graphic top */}
-              <div className="absolute top-0 inset-x-0 h-1 flex justify-between">
-                {Array.from({ length: 18 }).map((_, i) => (
-                  <div key={i} className="w-2.5 h-1.5 bg-slate-50 rotate-45 -translate-y-1.5" />
-                ))}
-              </div>
-
-              {/* Ticket content */}
-              <div className="pt-2 text-center border-b border-dashed border-slate-200 pb-4 space-y-1">
-                {storeIdentity.showLogoOnInvoice && storeIdentity.logoUrl && (
-                  <div className="flex justify-center mb-1.5">
-                    <div className="w-10 h-10 rounded-xl border border-slate-200 text-slate-700 flex items-center justify-center text-xl font-bold overflow-hidden bg-white shadow-xs">
-                      {storeIdentity.logoUrl.startsWith('data:image') || storeIdentity.logoUrl.startsWith('http') ? (
-                        <img src={storeIdentity.logoUrl} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        storeIdentity.logoUrl
-                      )}
-                    </div>
-                  </div>
-                )}
-                {storeIdentity.showNameOnInvoice && (
-                  <h4 className="font-extrabold text-sm text-slate-900 tracking-tight uppercase">{storeIdentity.name || 'MI NEGOCIO'}</h4>
-                )}
-                {storeIdentity.showSloganOnInvoice && storeIdentity.slogan && (
-                  <p className="text-[11px] text-slate-500 font-medium italic">{storeIdentity.slogan}</p>
-                )}
-                {storeIdentity.showAddressOnInvoice && storeIdentity.address && (
-                  <p className="text-[11px] text-slate-500">{storeIdentity.address}</p>
-                )}
-                {storeIdentity.showPhoneOnInvoice && storeIdentity.phone && (
-                  <p className="text-[11px] text-slate-500">Tel: {storeIdentity.phone}</p>
-                )}
-                <p className="text-[10px] text-slate-400 mt-2">SUCURSAL CENTRO • CAJA #1</p>
-              </div>
-
-              <div className="py-3 border-b border-dashed border-slate-200 space-y-1 text-slate-600">
-                <div className="flex justify-between">
-                  <span>Ticket:</span>
-                  <span className="font-bold text-slate-900">TKT-XXXXXX</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Fecha:</span>
-                  <span>{new Date().toLocaleString('es-ES', { hour12: false })}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Atendió:</span>
-                  <span>{clerkName}</span>
-                </div>
-                {selectedCustomerId && (
-                  <div className="flex justify-between">
-                    <span>Cliente:</span>
-                    <span className="font-bold text-slate-900 truncate max-w-[120px]">
-                      {customers.find(c => c.id === selectedCustomerId)?.name}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Items List */}
-              <div className="py-4 border-b border-dashed border-slate-200 space-y-3">
-                <div className="flex justify-between font-bold text-slate-900 pb-1">
-                  <span>Descripción</span>
-                  <span className="text-right">Importe</span>
-                </div>
-                <div className="space-y-3 max-h-44 overflow-y-auto pr-1">
-                  {cartItems.map((item) => (
-                    <div key={item.product.id} className="flex justify-between items-start text-slate-650 gap-4 text-[11px]">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold text-slate-800">{item.product.name}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {item.quantity} pza{item.quantity !== 1 ? 's' : ''} x ${item.product.price.toFixed(2)}
-                        </div>
-                      </div>
-                      <div className="text-right font-semibold text-slate-800 shrink-0">
-                        ${(item.product.price * item.quantity).toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Totals Section */}
-              <div className="py-3 border-b border-dashed border-slate-200 space-y-1">
-                <div className="flex justify-between text-slate-600">
-                  <span>Subtotal:</span>
-                  <span>${subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>ITBIS (18%):</span>
-                  <span>${tax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-base font-extrabold text-slate-900 pt-1">
-                  <span>TOTAL:</span>
-                  <span>${total.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Payment Details */}
-              <div className="py-3 text-slate-600 space-y-1 font-mono">
-                {paymentMethod === 'mixed' ? (
-                  <div className="space-y-1">
-                    <div className="flex justify-between font-bold text-slate-800 border-b border-dashed border-slate-200 pb-1">
-                      <span>Forma de pago:</span>
-                      <span>Mixto</span>
-                    </div>
-                    {mixedBreakdown.map((item) => {
-                      const label =
-                        item.method === 'cash' ? 'Efectivo' :
-                        item.method === 'card' ? 'Tarjeta' :
-                        item.method === 'transfer' ? 'Transf.' :
-                        item.method === 'credit' ? 'Crédito' : 'Nota de Crédito';
-                      return (
-                        <div key={item.id} className="flex justify-between text-[10px] pl-2 text-slate-700">
-                          <span>• {label}:</span>
-                          <span>RD$ {(Number(item.amount) || 0).toFixed(2)}</span>
-                        </div>
-                      );
-                    })}
-                    <div className="flex justify-between pt-1 font-semibold text-slate-800">
-                      <span>Pagó con:</span>
-                      <span>RD$ {mixedTotalEntered.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-950 font-bold">
-                      <span>Cambio:</span>
-                      <span>RD$ {mixedChangeAmount.toFixed(2)}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex justify-between">
-                      <span>Forma de pago:</span>
-                      <span className="capitalize font-bold text-slate-800">
-                        {paymentMethod === 'cash' ? 'Efectivo' : paymentMethod === 'card' ? 'Tarjeta' : paymentMethod === 'transfer' ? 'Transferencia' : paymentMethod === 'qr' ? 'Código QR' : 'A Crédito'}
-                      </span>
-                    </div>
-                    {paymentMethod !== 'credit' ? (
-                      <>
-                        <div className="flex justify-between">
-                          <span>Pagó con:</span>
-                          <span>${(paymentMethod === 'cash' ? amountPaid : total).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-950 font-bold">
-                          <span>Cambio:</span>
-                          <span>${(paymentMethod === 'cash' ? change : 0).toFixed(2)}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center font-bold text-rose-700 bg-rose-50 border border-rose-100 py-1.5 px-2 rounded-lg text-[10px] mt-1">
-                        PENDIENTE POR COBRAR (DEUDA)
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Footer barcode/thank you */}
-              <div className="pt-4 text-center border-t border-dashed border-slate-200 space-y-2">
-                <p className="text-[10px] text-slate-500 font-sans">¡GRACIAS POR SU PREFERENCIA!</p>
-                
-                {/* Simulated Barcode */}
-                <div className="flex flex-col items-center justify-center pt-1">
-                  <div className="flex items-end justify-center gap-[1px] h-6 w-32 bg-white">
-                    {Array.from({ length: 32 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="bg-black"
-                        style={{
-                          width: i % 4 === 0 ? '3px' : i % 3 === 0 ? '1px' : '2px',
-                          height: i % 5 === 0 ? '80%' : '100%',
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[8px] text-slate-400 mt-1 tracking-widest">
-                    TKT-0000000
-                  </span>
-                </div>
-              </div>
-
-              {/* Zigzag cut graphic bottom */}
-              <div className="absolute bottom-0 inset-x-0 h-1 flex justify-between rotate-180">
-                {Array.from({ length: 18 }).map((_, i) => (
-                  <div key={i} className="w-2.5 h-1.5 bg-slate-50 rotate-45 -translate-y-1.5" />
-                ))}
-              </div>
-            </div>
+            <ReceiptTemplate
+              cartItems={cartItems}
+              subtotal={subtotal}
+              tax={tax}
+              total={total}
+              paymentMethod={paymentMethod}
+              mixedBreakdown={mixedBreakdown}
+              mixedTotalEntered={mixedTotalEntered}
+              mixedChangeAmount={mixedChangeAmount}
+              amountPaid={amountPaid}
+              change={change}
+              selectedCustomerId={selectedCustomerId || undefined}
+              customerName={selectedCustomerId ? customers.find(c => c.id === selectedCustomerId)?.name : undefined}
+              clerkName={clerkName}
+              storeIdentity={storeIdentity}
+              ticketConfig={dashboardConfig?.ticketConfig}
+            />
           </div>
 
           <div className="text-[10px] text-slate-400 text-center mt-4">

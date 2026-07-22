@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Product, Sale, Customer, CustomerPayment, Employee, Closure, Movement, AccountPayable, PayablePayment, CardDeposit, DashboardConfig, SupplierReturn, CustomerRefund } from '../types';
+import { Product, Sale, Customer, CustomerPayment, Employee, Closure, Movement, AccountPayable, PayablePayment, CardDeposit, DashboardConfig, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote } from '../types';
 import { getCustomerDebt } from '../lib/customerDebt';
 import { getPayableBalance, getTotalPayablesBalance } from '../lib/payableDebt';
 import { getNextBusinessDay } from '../lib/businessDays';
@@ -30,7 +30,8 @@ import {
   Check,
   X,
   Landmark,
-  FileBarChart
+  FileBarChart,
+  Ban
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -88,9 +89,11 @@ interface DashboardViewProps {
   dashboardConfig?: DashboardConfig;
   onOpenMenudo?: () => void;
   supplierReturns?: SupplierReturn[];
+  supplierCreditNotes?: SupplierCreditNote[];
+  creditNotes?: CreditNote[];
 }
 
-type DashboardTab = 'resumen' | 'ventas' | 'creditos' | 'inventario' | 'empleados' | 'cuentas_pagar' | 'bancos' | 'devoluciones' | 'estado_resultados';
+type DashboardTab = 'resumen' | 'ventas' | 'creditos' | 'cuentas_pagar' | 'bancos' | 'inventario' | 'devoluciones' | 'notas_credito' | 'estado_resultados' | 'empleados';
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   isOpen,
@@ -103,6 +106,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   closures,
   movements = [],
   customerRefunds = [],
+  creditNotes = [],
   onNavigateToCustomer,
   onNavigateToProduct,
   onOpenExpenses,
@@ -113,6 +117,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   dashboardConfig = { id: 'dashboardConfig', cardFeePercent: 3.8, holidays: [] },
   onOpenMenudo,
   supplierReturns = [],
+  supplierCreditNotes = [],
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const [activeTab, setActiveTab] = useState<DashboardTab>('resumen');
@@ -121,6 +126,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
   const [confirmingDeposit, setConfirmingDeposit] = useState<CardDeposit | null>(null);
   const [confirmedAmountInput, setConfirmedAmountInput] = useState<string>('');
+
+  // Credit notes tab filter states
+  const [creditNoteSearch, setCreditNoteSearch] = useState('');
+  const [creditNoteStatusFilter, setCreditNoteStatusFilter] = useState<'all' | 'active' | 'depleted' | 'voided'>('all');
+  const [noteToVoid, setNoteToVoid] = useState<CreditNote | null>(null);
+  const [voidReasonInput, setVoidReasonInput] = useState('');
 
   // --- Auto-create CardDeposit entries for card sales ---
   useEffect(() => {
@@ -601,6 +612,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
     return sum;
   }, [customers, customerDebts]);
+
+  const activeCreditNotesBalance = useMemo(() => {
+    return creditNotes
+      .filter(cn => cn.status === 'active')
+      .reduce((sum, cn) => sum + (cn.remainingBalance || 0), 0);
+  }, [creditNotes]);
 
   // --- KPI f: Liquidez en Efectivo (CON DATOS REALES históricos aprox) ---
   const cashLiquidityTotal = useMemo(() => {
@@ -1549,6 +1566,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           { id: 'bancos', label: 'Bancos' },
           { id: 'inventario', label: 'Inventario' },
           { id: 'devoluciones', label: 'Devoluciones' },
+          { id: 'notas_credito', label: 'Notas de Crédito' },
           { id: 'estado_resultados', label: 'Estado de Resultados' },
           { id: 'empleados', label: 'Empleados' },
         ].map(tab => (
@@ -1643,9 +1661,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               >
                 <div>
                   <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1">Cuentas por Pagar</span>
-                  <span className="text-sm font-black font-mono text-rose-600">
+                  <span className="text-sm font-black font-mono text-rose-600 block">
                     RD$ {getTotalPayablesBalance(payables, payablePayments).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab('notas_credito');
+                    }}
+                    className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-slate-500 hover:text-indigo-600 transition-colors group cursor-pointer"
+                    title="Ver Notas de Crédito"
+                  >
+                    <span>+ Notas de Crédito:</span>
+                    <span className="font-mono font-extrabold text-slate-700 group-hover:text-indigo-600">
+                      RD$ {activeCreditNotesBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-100">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Saldo pendiente global</span>
@@ -2336,6 +2367,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               payablePayments={payablePayments}
               currentEmployee={currentEmployee}
               dashboardConfig={dashboardConfig}
+              supplierCreditNotes={supplierCreditNotes}
             />
           </div>
         )}
@@ -2347,6 +2379,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               products={products}
               supplierReturns={supplierReturns}
               currentEmployee={currentEmployee}
+              supplierCreditNotes={supplierCreditNotes}
+              payables={payables}
             />
           </div>
         )}
@@ -3214,6 +3248,219 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
 
+        {/* --- NOTAS DE CRÉDITO TAB --- */}
+        {activeTab === 'notas_credito' && (() => {
+          const totalActiveBalance = creditNotes
+            .filter(cn => cn.status === 'active')
+            .reduce((sum, cn) => sum + (cn.remainingBalance || 0), 0);
+          const totalCreatedCount = creditNotes.length;
+          const activeCount = creditNotes.filter(cn => cn.status === 'active').length;
+          const depletedCount = creditNotes.filter(cn => cn.status === 'depleted').length;
+          const voidedCount = creditNotes.filter(cn => cn.status === 'voided').length;
+
+          const filteredNotes = creditNotes.filter(cn => {
+            const codeMatch = cn.code.toLowerCase().includes(creditNoteSearch.toLowerCase()) ||
+              (cn.employeeName || '').toLowerCase().includes(creditNoteSearch.toLowerCase());
+            const statusMatch = creditNoteStatusFilter === 'all' || cn.status === creditNoteStatusFilter;
+            return codeMatch && statusMatch;
+          });
+
+          return (
+            <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
+              {/* Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                    🏷️ Notas de Crédito
+                  </h2>
+                  <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                    Gestión de notas de crédito emitidas por devoluciones y saldo disponible para canje en ventas.
+                  </p>
+                </div>
+              </div>
+
+              {/* Top Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-[10px] font-black uppercase tracking-wider">Saldo Total Disponible</span>
+                    <Receipt className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div className="text-2xl font-black font-mono text-indigo-600">
+                    RD$ {totalActiveBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    Monto pendiente de canje en ventas.
+                  </p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-[10px] font-black uppercase tracking-wider">Notas Creadas</span>
+                    <Package className="w-5 h-5 text-slate-600" />
+                  </div>
+                  <div className="text-2xl font-black text-slate-800">
+                    {totalCreatedCount} <span className="text-xs font-bold text-slate-400">notas</span>
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    Historial total de emisiones.
+                  </p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-[10px] font-black uppercase tracking-wider">Estado de Notas</span>
+                    <div className="flex gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" title="Activas"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-400" title="Agotadas"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-300" title="Anuladas"></span>
+                    </div>
+                  </div>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-xl font-black text-emerald-600">{activeCount} <span className="text-[10px] font-bold text-emerald-700">Activas</span></span>
+                    <span className="text-sm font-bold text-slate-300">/</span>
+                    <span className="text-lg font-bold text-slate-600">{depletedCount} <span className="text-[10px] font-semibold text-slate-500">Agotadas</span></span>
+                    <span className="text-sm font-bold text-slate-300">/</span>
+                    <span className="text-lg font-bold text-slate-500">{voidedCount} <span className="text-[10px] font-semibold text-slate-400">Anuladas</span></span>
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    Proporción del estado de las notas.
+                  </p>
+                </div>
+              </div>
+
+              {/* Search & Filter Controls */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="relative w-full sm:w-80">
+                  <input
+                    type="text"
+                    placeholder="Buscar por código de nota o empleado..."
+                    value={creditNoteSearch}
+                    onChange={(e) => setCreditNoteSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-slate-400"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  {(['all', 'active', 'depleted', 'voided'] as const).map(status => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setCreditNoteStatusFilter(status)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        creditNoteStatusFilter === status
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {status === 'all' && 'Todas'}
+                      {status === 'active' && 'Activas'}
+                      {status === 'depleted' && 'Agotadas'}
+                      {status === 'voided' && 'Anuladas'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Credit Notes Table */}
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+                {filteredNotes.length === 0 ? (
+                  <div className="p-12 text-center space-y-2">
+                    <p className="text-sm font-bold text-slate-600">No se encontraron notas de crédito</p>
+                    <p className="text-xs text-slate-400">
+                      {creditNoteSearch || creditNoteStatusFilter !== 'all'
+                        ? 'Pruebe ajustando los filtros de búsqueda.'
+                        : 'Las notas de crédito aparecerán aquí al emitirse en devoluciones.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                          <th className="py-3 px-4">Código</th>
+                          <th className="py-3 px-4">Monto Original</th>
+                          <th className="py-3 px-4">Saldo Disponible</th>
+                          <th className="py-3 px-4">Estado</th>
+                          <th className="py-3 px-4">Empleado</th>
+                          <th className="py-3 px-4">Fecha de Emisión</th>
+                          {permissions.manageReturns && <th className="py-3 px-4 text-right">Acciones</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                        {filteredNotes.map((note) => (
+                          <tr key={note.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3.5 px-4 font-mono font-black text-indigo-600 text-sm">
+                              {note.code}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
+                              RD$ {note.originalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-extrabold text-emerald-600">
+                              RD$ {note.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {note.status === 'active' && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                  Activa
+                                </span>
+                              )}
+                              {note.status === 'depleted' && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                  Agotada
+                                </span>
+                              )}
+                              {note.status === 'voided' && (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-300 w-fit">
+                                    <Ban className="w-3 h-3 text-slate-400" />
+                                    <span className="line-through">Anulada</span>
+                                  </span>
+                                  {note.voidReason && (
+                                    <span className="text-[10px] text-slate-500 font-normal italic truncate max-w-[160px]" title={note.voidReason}>
+                                      Motivo: {note.voidReason}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 font-medium text-slate-600">
+                              {note.employeeName || 'Sistema'}
+                            </td>
+                            <td className="py-3.5 px-4 font-medium text-slate-500">
+                              {note.createdAt ? new Date(note.createdAt).toLocaleString('es-DO') : '—'}
+                            </td>
+                            {permissions.manageReturns && (
+                              <td className="py-3.5 px-4 text-right">
+                                {note.status === 'active' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNoteToVoid(note);
+                                      setVoidReasonInput('');
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Ban className="w-3.5 h-3.5" />
+                                    Anular
+                                  </button>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
 
       {/* Detalle de Liquidez en Efectivo Modal */}
@@ -3346,6 +3593,122 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Cerrar Detalle
               </button>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Anular Nota de Crédito Modal */}
+      {noteToVoid && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in text-slate-800">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 flex flex-col animate-scale-up">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-rose-100 text-rose-600 rounded-xl">
+                  <Ban className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Anular Nota de Crédito</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Código: {noteToVoid.code}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setNoteToVoid(null); setVoidReasonInput(''); }}
+                className="p-1.5 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const reason = voidReasonInput.trim();
+                if (!reason) {
+                  await showAlert('Motivo obligatorio', 'Debe ingresar un motivo para anular la nota de crédito.', 'warning');
+                  return;
+                }
+
+                const confirmed = await showConfirm(
+                  'Confirmar Anulación de Nota',
+                  `¿Está seguro de anular la nota de crédito ${noteToVoid.code} con saldo disponible de RD$ ${noteToVoid.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}?`
+                );
+
+                if (!confirmed) return;
+
+                try {
+                  const updatedNote: CreditNote = {
+                    ...noteToVoid,
+                    status: 'voided',
+                    voidReason: reason,
+                    voidedAt: new Date().toISOString(),
+                    voidedByEmployeeId: currentEmployee?.id || '',
+                    voidedByEmployeeName: currentEmployee?.name || 'Sistema'
+                  };
+
+                  await firestoreService.setDocWithId('creditNotes', updatedNote.id, updatedNote);
+
+                  setNoteToVoid(null);
+                  setVoidReasonInput('');
+                  await showAlert('Nota Anulada', `La nota de crédito ${updatedNote.code} ha sido anulada con éxito.`, 'success');
+                } catch (err) {
+                  console.error('Error voiding credit note:', err);
+                  await showAlert('Error', 'No se pudo anular la nota de crédito. Intente nuevamente.', 'error');
+                }
+              }}
+              className="p-6 space-y-4"
+            >
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 text-xs space-y-1">
+                <div className="flex justify-between font-bold text-slate-700">
+                  <span>Monto Original:</span>
+                  <span>RD$ {noteToVoid.originalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between font-black text-indigo-600">
+                  <span>Saldo Disponible:</span>
+                  <span>RD$ {noteToVoid.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-1.5">
+                  Motivo de Anulación <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  required
+                  placeholder="Ej. Error al imprimir, nota extraviada..."
+                  value={voidReasonInput}
+                  onChange={(e) => setVoidReasonInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white placeholder-slate-400"
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-500">
+                Al anular esta nota, se dejará rastro y no podrá volver a ser utilizada ni canjeada en ventas.
+              </p>
+
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setNoteToVoid(null); setVoidReasonInput(''); }}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 active:scale-95 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  Anular Nota
+                </button>
+              </div>
+            </form>
 
           </div>
         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { AccountPayable, PayablePayment, Product, Employee, Movement, DashboardConfig } from '../types';
+import { AccountPayable, PayablePayment, Product, Employee, Movement, DashboardConfig, SupplierCreditNote } from '../types';
 import { SupplierPicker } from './SupplierPicker';
 import { firestoreService } from '../lib/firebase';
 import { useAlert } from '../context/AlertContext';
@@ -21,13 +21,17 @@ import {
   X,
   FileText,
   User,
-  TrendingDown
+  TrendingDown,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck
 } from 'lucide-react';
 
 interface PayablesViewProps {
   products: Product[];
   payables: AccountPayable[];
   payablePayments: PayablePayment[];
+  supplierCreditNotes?: SupplierCreditNote[];
   currentEmployee: Employee | null;
   dashboardConfig?: DashboardConfig;
 }
@@ -36,6 +40,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
   products,
   payables,
   payablePayments,
+  supplierCreditNotes = [],
   currentEmployee,
   dashboardConfig,
 }) => {
@@ -53,31 +58,15 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
   const [totalAmount, setTotalAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [showProviderSuggestions, setShowProviderSuggestions] = useState(false);
 
   // New abono form state
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer' | 'credit_note'>('cash');
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>('');
+  const [selectedCreditNoteId, setSelectedCreditNoteId] = useState<string>('');
 
-  // Get unique providers from products list
-  const suggestedProviders = useMemo(() => {
-    const providers = new Set<string>();
-    products.forEach(p => {
-      if (p.provider && p.provider.trim()) {
-        providers.add(p.provider.trim());
-      }
-    });
-    return Array.from(providers);
-  }, [products]);
-
-  // Filter providers based on typed name
-  const filteredSuggestions = useMemo(() => {
-    if (!supplierName) return suggestedProviders;
-    return suggestedProviders.filter(p => 
-      p.toLowerCase().includes(supplierName.toLowerCase())
-    );
-  }, [supplierName, suggestedProviders]);
+  // Toggle supplier credit notes panel
+  const [showCreditNotesPanel, setShowCreditNotesPanel] = useState(false);
 
   // Selected payable object
   const selectedPayable = useMemo(() => {
@@ -89,6 +78,30 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
     if (!selectedPayableId) return 0;
     return getPayableBalance(selectedPayableId, payables, payablePayments);
   }, [selectedPayableId, payables, payablePayments]);
+
+  // Active credit notes for the selected payable's supplier
+  const activeNotesForSupplier = useMemo(() => {
+    if (!selectedPayable) return [];
+    const targetName = selectedPayable.supplierName.trim().toLowerCase();
+    return supplierCreditNotes.filter(n => 
+      n.status === 'active' && 
+      (n.remainingBalance || 0) > 0 && 
+      n.supplierName.trim().toLowerCase() === targetName
+    );
+  }, [selectedPayable, supplierCreditNotes]);
+
+  // Selected credit note object
+  const selectedCreditNote = useMemo(() => {
+    if (!selectedCreditNoteId) return activeNotesForSupplier[0] || null;
+    return activeNotesForSupplier.find(n => n.id === selectedCreditNoteId) || activeNotesForSupplier[0] || null;
+  }, [selectedCreditNoteId, activeNotesForSupplier]);
+
+  // Total available supplier credit notes across all suppliers
+  const totalAvailableSupplierCredits = useMemo(() => {
+    return supplierCreditNotes
+      .filter(n => n.status === 'active')
+      .reduce((sum, n) => sum + (n.remainingBalance || 0), 0);
+  }, [supplierCreditNotes]);
 
   // Payments for selected payable
   const selectedPayablePayments = useMemo(() => {
@@ -143,6 +156,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
   React.useEffect(() => {
     if (selectedPayableId) {
       setPaymentAmount(selectedPayableBalance.toString());
+      setSelectedCreditNoteId('');
     } else {
       setPaymentAmount('');
     }
@@ -214,9 +228,20 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
       return;
     }
 
+    if (paymentMethod === 'credit_note') {
+      if (!selectedCreditNote) {
+        await showAlert('Sin nota de crédito', `No hay notas de crédito activas disponibles para el proveedor ${selectedPayable.supplierName}.`, 'warning');
+        return;
+      }
+      if (amt > selectedCreditNote.remainingBalance) {
+        await showAlert('Monto excede nota', `El abono (RD$ ${amt.toFixed(2)}) no puede exceder el saldo disponible en la nota de crédito seleccionada (RD$ ${selectedCreditNote.remainingBalance.toFixed(2)}).`, 'error');
+        return;
+      }
+    }
+
     const confirmPayment = await showConfirm(
       'Confirmar Pago',
-      `¿Está seguro de registrar este pago de RD$ ${amt.toLocaleString('es-DO', { minimumFractionDigits: 2 })} por concepto de "${selectedPayable.concept}" al proveedor "${selectedPayable.supplierName}"?`
+      `¿Está seguro de registrar este pago de RD$ ${amt.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${paymentMethod === 'credit_note' ? 'Nota de Crédito' : paymentMethod}) por concepto de "${selectedPayable.concept}" al proveedor "${selectedPayable.supplierName}"?`
     );
 
     if (!confirmPayment) return;
@@ -231,27 +256,38 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
         date: new Date().toISOString().split('T')[0],
         paymentMethod: paymentMethod,
         bankAccountId: ['transfer', 'card'].includes(paymentMethod) ? selectedBankAccountId || undefined : undefined,
+        supplierCreditNoteId: paymentMethod === 'credit_note' ? selectedCreditNote?.id : undefined,
         employeeId: currentEmployee?.id || '',
         employeeName: currentEmployee?.name || 'Sistema'
       };
 
       await firestoreService.addDoc('payablePayments', paymentData);
 
-      // 2. Update status of the payable if fully paid
+      // 2. Update Supplier Credit Note if applicable
+      if (paymentMethod === 'credit_note' && selectedCreditNote) {
+        const newRemaining = Math.max(0, selectedCreditNote.remainingBalance - amt);
+        const newStatus = newRemaining <= 0 ? 'depleted' : 'active';
+        await firestoreService.updateDoc('supplierCreditNotes', selectedCreditNote.id, {
+          remainingBalance: newRemaining,
+          status: newStatus
+        });
+      }
+
+      // 3. Update status of the payable if fully paid
       if (newBalance <= 0) {
         await firestoreService.updateDoc('accountsPayable', selectedPayable.id, {
           status: 'paid'
         });
       }
 
-      // 3. Create Movement automatically if CASH payment
+      // 4. Create Movement automatically ONLY if CASH payment
       if (paymentMethod === 'cash') {
         const movementData: Partial<Movement> = {
           type: 'out',
           expenseType: 'pago_factura',
           amount: amt,
           concept: `Pago a proveedor: ${selectedPayable.supplierName}`,
-          category: 'Suministros', // fits supplier payments best
+          category: 'Suministros',
           paymentMethod: 'cash',
           clerkName: currentEmployee?.name || 'Sistema',
           employeeId: currentEmployee?.id || '',
@@ -266,6 +302,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
       await showAlert('Éxito', 'Pago registrado correctamente.', 'success');
       setPaymentAmount('');
       setSelectedBankAccountId('');
+      setSelectedCreditNoteId('');
     } catch (error) {
       console.error('Error saving payable payment:', error);
       await showAlert('Error', 'No se pudo guardar el pago.', 'error');
@@ -278,354 +315,394 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
     today.setHours(0, 0, 0, 0);
     const due = new Date(dueDateStr);
     due.setHours(0, 0, 0, 0);
+    
     const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) {
-      return { text: `Vencido hace ${Math.abs(diffDays)} días`, isOverdue: true, isSoon: false };
+      return { text: `Vencida hace ${Math.abs(diffDays)}d`, color: 'text-rose-600 bg-rose-50 border-rose-200' };
     } else if (diffDays === 0) {
-      return { text: 'Vence hoy', isOverdue: false, isSoon: true };
-    } else if (diffDays === 1) {
-      return { text: 'Vence mañana', isOverdue: false, isSoon: true };
+      return { text: 'Vence hoy', color: 'text-amber-600 bg-amber-50 border-amber-200' };
+    } else if (diffDays <= 3) {
+      return { text: `Vence en ${diffDays}d`, color: 'text-amber-600 bg-amber-50 border-amber-200' };
     } else {
-      return { text: `Vence en ${diffDays} días`, isOverdue: false, isSoon: diffDays <= 5 };
+      return { text: `Vence en ${diffDays}d`, color: 'text-slate-500 bg-slate-50 border-slate-200' };
     }
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-full min-h-0">
+    <div id="payables-view-root" className="flex flex-col gap-4 h-full">
       
-      {/* LEFT COLUMN: Search & List */}
-      <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
-        
-        {/* Search & Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <div>
-            <h3 className="text-base font-black text-slate-800 uppercase tracking-wide">Cuentas por Pagar</h3>
-            <p className="text-xs text-slate-400">Facturas y deudas pendientes con proveedores</p>
+      {/* Top Banner: Available Supplier Credit Notes Bar */}
+      <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
+            <CreditCard className="w-5 h-5" />
           </div>
-          {permissions.managePayables && (
-            <button
-              onClick={() => {
-                setSelectedPayableId(null);
-                setShowAddForm(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nueva Cuenta</span>
-            </button>
-          )}
+          <div>
+            <div className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">
+              Notas de Crédito de Proveedores
+            </div>
+            <div className="text-xs font-bold text-emerald-950 font-mono">
+              RD$ {totalAvailableSupplierCredits.toLocaleString('es-DO', { minimumFractionDigits: 2 })} disponibles en notas a favor
+            </div>
+          </div>
         </div>
 
-        {/* Filters and Search Bar */}
-        <div className="space-y-3 mb-4">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar por proveedor o concepto..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        <button
+          type="button"
+          onClick={() => setShowCreditNotesPanel(!showCreditNotesPanel)}
+          className="px-3.5 py-1.5 bg-white hover:bg-emerald-100/60 text-emerald-800 border border-emerald-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-2xs self-start sm:self-center flex items-center gap-1"
+        >
+          <span>{showCreditNotesPanel ? 'Ocultar Resumen' : 'Ver Notas de Crédito'}</span>
+          {showCreditNotesPanel ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+
+      {/* Expanded Supplier Credit Notes Sub-Section */}
+      {showCreditNotesPanel && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 animate-in fade-in duration-150">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider">
+              Resumen de Notas de Crédito con Proveedores
+            </h4>
+            <span className="text-[10px] font-bold text-slate-400">
+              {supplierCreditNotes.filter(n => n.status === 'active').length} notas activas
+            </span>
+          </div>
+
+          {supplierCreditNotes.length === 0 ? (
+            <p className="text-xs text-slate-400 italic py-4 text-center">
+              No tienes notas de crédito registradas de proveedores. Se generarán al acreditar devoluciones o registrar notas manuales en la sección de Devoluciones.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto pr-1">
+              {supplierCreditNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className={`p-3 rounded-xl border flex flex-col justify-between text-xs space-y-1.5 ${
+                    note.status === 'active'
+                      ? 'border-emerald-200 bg-emerald-50/20'
+                      : 'border-slate-150 bg-slate-50 opacity-60'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="font-black text-slate-800 uppercase text-[11px]">{note.supplierName}</span>
+                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${
+                      note.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {note.status === 'active' ? 'Activa' : 'Agotada'}
+                    </span>
+                  </div>
+
+                  <p className="text-[9px] text-slate-500 truncate">{note.reason}</p>
+
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[10px] font-mono">
+                    <span className="text-slate-400 font-sans text-[9px]">Saldo:</span>
+                    <span className="font-black text-emerald-700">
+                      RD$ {(note.remainingBalance || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Layout: Accounts Payable */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start min-h-[450px]">
+        
+        {/* Left Column: Accounts Payable List (lg:col-span-7) */}
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-full">
+          
+          {/* Header & Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider">Cuentas por Pagar</h3>
+              <p className="text-[10px] font-bold text-slate-400">Deudas y facturas pendientes con proveedores</p>
+            </div>
+
+            {permissions.managePayables && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddForm(!showAddForm);
+                  setSelectedPayableId(null);
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs flex items-center gap-1 self-start sm:self-center"
               >
-                <X className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" />
+                <span>Nueva Cuenta</span>
               </button>
             )}
           </div>
 
-          <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-            {(['pending', 'paid', 'all'] as const).map((tab) => (
+          {/* Filters & Search */}
+          <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
-                key={tab}
-                onClick={() => setFilterTab(tab)}
-                className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                  filterTab === tab
-                    ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/50'
-                    : 'text-slate-400 hover:text-slate-600'
+                onClick={() => setFilterTab('pending')}
+                className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all cursor-pointer ${
+                  filterTab === 'pending' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                {tab === 'pending' ? 'Pendientes' : tab === 'paid' ? 'Pagadas' : 'Todas'}
+                Pendientes
               </button>
-            ))}
+              <button
+                onClick={() => setFilterTab('paid')}
+                className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all cursor-pointer ${
+                  filterTab === 'paid' ? 'bg-white text-emerald-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Pagadas
+              </button>
+              <button
+                onClick={() => setFilterTab('all')}
+                className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all cursor-pointer ${
+                  filterTab === 'all' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Todas
+              </button>
+            </div>
+
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por proveedor o concepto..."
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:bg-white"
+              />
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="mt-3 flex-1 overflow-y-auto space-y-2 pr-1 max-h-[420px]">
+            {filteredPayables.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 border border-dashed border-slate-100 rounded-2xl">
+                <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                <p className="text-xs font-bold">No hay cuentas por pagar {filterTab === 'pending' ? 'pendientes' : ''}</p>
+              </div>
+            ) : (
+              filteredPayables.map((item) => {
+                const bal = getPayableBalance(item.id, payables, payablePayments);
+                const isSelected = item.id === selectedPayableId;
+                const daysInfo = getDaysRemainingText(item.dueDate);
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedPayableId(isSelected ? null : item.id);
+                      setShowAddForm(false);
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                      isSelected
+                        ? 'border-indigo-600 bg-indigo-50/20 shadow-xs'
+                        : bal === 0
+                        ? 'border-slate-150 bg-slate-50/50 opacity-70'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black uppercase text-slate-800">
+                          {item.supplierName}
+                        </span>
+                        {bal > 0 ? (
+                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${daysInfo.color}`}>
+                            {daysInfo.text}
+                          </span>
+                        ) : (
+                          <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Pagada
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 font-semibold">
+                        {item.concept}
+                      </p>
+
+                      <div className="text-[9px] text-slate-400 flex items-center gap-2">
+                        <span>Vence: {item.dueDate}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right self-start sm:self-center font-mono">
+                      <div className="text-xs font-black text-slate-900">
+                        RD$ {bal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-sans">
+                        Total: RD$ {item.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Scrollable list */}
-        <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-          {filteredPayables.length === 0 ? (
-            <div className="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
-              <FileText className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-              <p className="text-xs font-black text-slate-500 uppercase tracking-wide">No se encontraron deudas</p>
-              <p className="text-[10px] text-slate-400">Las deudas filtradas aparecerán en esta sección</p>
-            </div>
-          ) : (
-            filteredPayables.map((p) => {
-              const bal = getPayableBalance(p.id, payables, payablePayments);
-              const { text: daysText, isOverdue, isSoon } = getDaysRemainingText(p.dueDate);
-              const isSelected = selectedPayableId === p.id;
-              
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => {
-                    setShowAddForm(false);
-                    setSelectedPayableId(p.id);
-                  }}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-indigo-50/50 border-indigo-200 shadow-xs'
-                      : 'bg-white hover:bg-slate-50/50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-bold text-xs text-slate-800 leading-tight">
-                        {p.supplierName}
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                        {p.concept}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-black font-mono text-xs text-slate-800">
-                        RD$ {bal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                      </div>
-                      {p.totalAmount > bal && bal > 0 && (
-                        <div className="text-[9px] text-slate-400 font-medium mt-0.5">
-                          Total: RD$ {p.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-[10px] font-black text-slate-600 font-mono">
-                        {p.dueDate}
-                      </span>
-                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md ${
-                        isOverdue 
-                          ? 'bg-rose-50 text-rose-600 border border-rose-100' 
-                          : isSoon 
-                            ? 'bg-amber-50 text-amber-600 border border-amber-100' 
-                            : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {daysText}
-                      </span>
-                    </div>
-
-                    <div>
-                      {bal === 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase border border-emerald-100">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span>Pagada</span>
-                        </span>
-                      ) : p.totalAmount > bal ? (
-                        <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[9px] font-black uppercase border border-amber-100">
-                          Abono Parcial
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-rose-50 text-rose-600 rounded-md text-[9px] font-black uppercase border border-rose-100">
-                          Pendiente
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* RIGHT COLUMN: Detail pane OR New payable form */}
-      <div className="w-full lg:w-[420px] shrink-0 flex flex-col min-h-0 bg-slate-50/50 border border-slate-200 rounded-3xl p-5">
-        
-        {/* NEW PAYABLE FORM */}
-        {showAddForm && (
-          <form onSubmit={handleCreatePayable} className="flex-1 flex flex-col justify-between min-h-0">
-            <div className="space-y-4 overflow-y-auto pr-1">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-600" />
-                  <span className="text-sm font-black text-slate-800 uppercase tracking-wide">Nueva Cuenta por Pagar</span>
-                </div>
+        {/* Right Column: Add Payable Form OR Selected Payable Details & Abonos (lg:col-span-5) */}
+        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col h-full min-h-[450px]">
+          
+          {/* Option A: Add New Payable Form */}
+          {showAddForm && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider">Nueva Cuenta por Pagar</h3>
                 <button
-                  type="button"
-                  onClick={resetForm}
-                  className="p-1 rounded-lg hover:bg-slate-150 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  onClick={() => setShowAddForm(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Supplier Input with suggestions */}
-              <div className="space-y-1 relative">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Proveedor</label>
-                <SupplierPicker
-                  value={supplierName}
-                  onChange={setSupplierName}
-                  products={products}
-                  payables={payables}
-                  placeholder="Escribe o selecciona proveedor..."
-                />
-              </div>
+              <form onSubmit={handleCreatePayable} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Proveedor</label>
+                  <SupplierPicker
+                    value={supplierName}
+                    onChange={setSupplierName}
+                    products={products}
+                    payables={payables}
+                    placeholder="Escriba o seleccione proveedor..."
+                  />
+                </div>
 
-              {/* Concept Input */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Concepto / Descripción</label>
-                <div className="relative">
-                  <Tag className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Concepto / NCF / Factura</label>
                   <input
                     type="text"
-                    placeholder="Ej. Factura #8928, compra de embutidos..."
+                    required
                     value={concept}
                     onChange={(e) => setConcept(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-all"
+                    placeholder="Ej. Factura #45821 - Compra mercancía"
+                    className="w-full px-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-              </div>
 
-              {/* Total Amount Input */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Monto Total (RD$)</label>
-                <div className="relative">
-                  <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={totalAmount}
-                    onChange={(e) => setTotalAmount(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Due Date Input */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Fecha de Vencimiento</label>
-                <div className="relative">
-                  <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono transition-all"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-200 flex gap-2">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="flex-1 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-wider text-slate-500 transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer shadow-xs"
-              >
-                Registrar
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* DETAILS PANEL & REGISTER ABONO FORM */}
-        {!showAddForm && selectedPayable && (
-          <div className="flex-1 flex flex-col justify-between min-h-0">
-            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
-              
-              {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div>
-                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Detalle de Deuda</span>
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">{selectedPayable.supplierName}</h4>
-                </div>
-                <button
-                  onClick={() => setSelectedPayableId(null)}
-                  className="p-1 rounded-lg hover:bg-slate-150 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Details card */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
-                <div className="flex justify-between items-start gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Concepto:</span>
-                  <span className="text-xs text-slate-700 font-medium text-right">{selectedPayable.concept}</span>
-                </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Monto original:</span>
-                  <span className="text-xs font-bold text-slate-700 font-mono">RD$ {selectedPayable.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Saldo pendiente:</span>
-                  <span className="text-xs font-black text-rose-600 font-mono bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">
-                    RD$ {selectedPayableBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Vencimiento:</span>
-                  <span className="text-xs font-bold text-slate-700 font-mono flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-slate-400" />
-                    {selectedPayable.dueDate}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Creado por:</span>
-                  <span className="text-xs font-bold text-slate-500">
-                    {selectedPayable.employeeName || 'Sistema'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Payments History */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Historial de Abonos</span>
-                {selectedPayablePayments.length === 0 ? (
-                  <p className="text-[10px] text-slate-400 italic text-center py-4 bg-white border border-slate-100 rounded-2xl">
-                    No se han registrado abonos a esta cuenta.
-                  </p>
-                ) : (
-                  <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1 bg-white p-2 border border-slate-150 rounded-2xl">
-                    {selectedPayablePayments.map((pay) => (
-                      <div key={pay.id} className="flex justify-between items-center p-2 rounded-xl bg-slate-50 text-[10px] border border-slate-100">
-                        <div>
-                          <div className="font-bold text-slate-700">RD$ {pay.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
-                          <div className="text-[8px] text-slate-400 font-medium">
-                            {pay.date} • {pay.paymentMethod === 'cash' ? 'Efectivo' : pay.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}
-                          </div>
-                        </div>
-                        <div className="text-[8px] text-slate-400 italic font-medium">
-                          {pay.employeeName || 'Cajero'}
-                        </div>
-                      </div>
-                    ))}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Monto Total (RD$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={totalAmount}
+                      onChange={(e) => setTotalAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full px-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
                   </div>
-                )}
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Fecha Vencimiento</label>
+                    <input
+                      type="date"
+                      required
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5 mt-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Guardar Cuenta</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Option B: Selected Payable Details & Abonos */}
+          {!showAddForm && selectedPayable && (
+            <div className="space-y-4 flex flex-col h-full justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider">Detalle de Cuenta</span>
+                  <button
+                    onClick={() => setSelectedPayableId(null)}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase">{selectedPayable.supplierName}</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">{selectedPayable.concept}</p>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold text-slate-500">
+                      Vence: {selectedPayable.dueDate}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 font-mono text-xs">
+                    <div>
+                      <span className="text-[9px] text-slate-400 uppercase font-sans font-bold block">Total Deuda</span>
+                      <span className="font-bold text-slate-700">
+                        RD$ {selectedPayable.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] text-slate-400 uppercase font-sans font-bold block">Saldo Pendiente</span>
+                      <span className="font-black text-rose-600">
+                        RD$ {selectedPayableBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payments History for this Payable */}
+                <div className="mt-3 space-y-1.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Historial de Abonos</span>
+                  {selectedPayablePayments.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic text-center py-3 bg-slate-50 border border-slate-150 rounded-xl">
+                      Sin abonos registrados.
+                    </p>
+                  ) : (
+                    <div className="max-h-28 overflow-y-auto space-y-1 pr-1 bg-slate-50/50 p-2 border border-slate-200 rounded-xl">
+                      {selectedPayablePayments.map((pay) => (
+                        <div key={pay.id} className="flex justify-between items-center p-2 rounded-lg bg-white text-[10px] border border-slate-150">
+                          <div>
+                            <span className="font-bold text-slate-800 font-mono">RD$ {pay.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                            <div className="text-[8px] text-slate-400 font-medium flex items-center gap-1">
+                              <span>{pay.date}</span>
+                              <span>•</span>
+                              <span className="uppercase font-bold text-indigo-600">
+                                {pay.paymentMethod === 'cash' ? 'Efectivo' : pay.paymentMethod === 'card' ? 'Tarjeta' : pay.paymentMethod === 'credit_note' ? 'Nota de Crédito' : 'Transferencia'}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-[8px] text-slate-400 italic">
+                            {pay.employeeName || 'Cajero'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Register payment form if still has balance */}
+              {/* Register payment form if balance remains */}
               {selectedPayableBalance > 0 && permissions.managePayables && (
-                <form onSubmit={handleRegisterPayment} className="border-t border-slate-200 pt-3 space-y-3">
+                <form onSubmit={handleRegisterPayment} className="border-t border-slate-200 pt-3 space-y-2.5">
                   <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider block">Registrar Abono</span>
-                  
-                  <div className="grid grid-cols-2 gap-2.5">
-                    
+
+                  <div className="grid grid-cols-2 gap-2">
                     {/* Amount Input */}
                     <div className="space-y-1">
                       <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Monto a pagar</label>
@@ -639,12 +716,12 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                           placeholder="0.00"
                           value={paymentAmount}
                           onChange={(e) => setPaymentAmount(e.target.value)}
-                          className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 placeholder-slate-400 font-mono font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                          className="w-full pl-7 pr-2 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-700 font-mono font-bold focus:outline-none focus:border-indigo-500"
                         />
                       </div>
                     </div>
 
-                    {/* Payment Method */}
+                    {/* Payment Method Selector */}
                     <div className="space-y-1">
                       <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Método de pago</label>
                       <select
@@ -652,23 +729,65 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                         onChange={(e) => {
                           setPaymentMethod(e.target.value as any);
                           setSelectedBankAccountId('');
+                          setSelectedCreditNoteId('');
                         }}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 font-black uppercase tracking-wide focus:outline-none focus:border-indigo-500 transition-all"
+                        className="w-full px-2 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-extrabold uppercase tracking-wide focus:outline-none focus:border-indigo-500"
                       >
                         <option value="cash">Efectivo</option>
                         <option value="card">Tarjeta</option>
                         <option value="transfer">Transf.</option>
+                        <option value="credit_note">
+                          Nota de Crédito ({activeNotesForSupplier.length})
+                        </option>
                       </select>
                     </div>
-
                   </div>
 
+                  {/* If Credit Note selected */}
+                  {paymentMethod === 'credit_note' && (
+                    <div className="space-y-1.5 bg-indigo-50/70 p-2.5 border border-indigo-150 rounded-xl">
+                      <label className="text-[9px] font-bold uppercase text-indigo-800 tracking-wide block">
+                        Nota de Crédito del Proveedor ({selectedPayable.supplierName})
+                      </label>
+                      {activeNotesForSupplier.length === 0 ? (
+                        <div className="text-[10px] text-amber-800 font-semibold bg-amber-50 p-2 rounded-lg border border-amber-200">
+                          ⚠️ No tienes notas de crédito activas registradas para {selectedPayable.supplierName}.
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          {activeNotesForSupplier.length > 1 && (
+                            <select
+                              value={selectedCreditNoteId}
+                              onChange={(e) => setSelectedCreditNoteId(e.target.value)}
+                              className="w-full px-2 py-1 bg-white border border-indigo-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none"
+                            >
+                              {activeNotesForSupplier.map(n => (
+                                <option key={n.id} value={n.id}>
+                                  RD$ {n.remainingBalance.toFixed(2)} - {n.reason}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {selectedCreditNote && (
+                            <div className="text-[10px] text-emerald-800 font-extrabold flex justify-between items-center bg-white p-2 rounded-lg border border-emerald-200">
+                              <span>Saldo disponible en esta nota:</span>
+                              <span className="font-mono text-xs">
+                                RD$ {selectedCreditNote.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* If Transfer / Card selected */}
                   {['transfer', 'card'].includes(paymentMethod) && (() => {
                     const activeBankAccounts = (dashboardConfig?.bankAccounts ?? []).filter(ba => ba.active);
                     return (
-                      <div className="space-y-1 mt-2">
+                      <div className="space-y-1">
                         <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">
-                          Cuenta Bancaria {paymentMethod === 'card' ? 'Destino' : 'Origen'} (Obligatorio)
+                          Cuenta Bancaria (Obligatorio)
                         </label>
                         {activeBankAccounts.length === 0 ? (
                           <div className="text-[10px] text-amber-800 font-semibold bg-amber-50 border border-amber-250 p-2 rounded-xl">
@@ -678,7 +797,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                           <select
                             value={selectedBankAccountId}
                             onChange={(e) => setSelectedBankAccountId(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-750 font-semibold focus:outline-none focus:border-indigo-500 transition-all"
+                            className="w-full px-2.5 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-750 font-semibold focus:outline-none focus:border-indigo-500"
                           >
                             <option value="">-- Seleccionar Cuenta --</option>
                             {activeBankAccounts.map(ba => (
@@ -702,19 +821,20 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                 </form>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* DEFAULT VIEW: Instruction details */}
-        {!showAddForm && !selectedPayable && (
-          <div className="flex-1 flex flex-col justify-center items-center text-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-3xl">
-            <TrendingDown className="w-10 h-10 text-slate-300 mb-3" />
-            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wide mb-1">Cuentas por Pagar</h4>
-            <p className="text-[10px] text-slate-400 max-w-[240px]">
-              Seleccione una cuenta por pagar de la lista para registrar abonos, o haga clic en "Nueva Cuenta" para registrar una nueva deuda con proveedor.
-            </p>
-          </div>
-        )}
+          {/* Option C: Default Placeholder */}
+          {!showAddForm && !selectedPayable && (
+            <div className="flex-1 flex flex-col justify-center items-center text-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+              <TrendingDown className="w-10 h-10 text-slate-300 mb-3" />
+              <h4 className="text-xs font-black text-slate-500 uppercase tracking-wide mb-1">Cuentas por Pagar</h4>
+              <p className="text-[10px] text-slate-400 max-w-[240px]">
+                Seleccione una cuenta de la lista para registrar abonos o aplicar notas de crédito de proveedores.
+              </p>
+            </div>
+          )}
+
+        </div>
 
       </div>
 

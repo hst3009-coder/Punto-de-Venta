@@ -17,6 +17,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<'admin' | 'manager' | 'cashier', E
     managePayables: true,
     manageReturns: true,
     confirmBankDeposits: true,
+    exportFullBackup: true,
   },
   manager: {
     viewDashboard: true,
@@ -34,6 +35,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<'admin' | 'manager' | 'cashier', E
     managePayables: true,
     manageReturns: true,
     confirmBankDeposits: true,
+    exportFullBackup: false,
   },
   cashier: {
     viewDashboard: false,
@@ -51,6 +53,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<'admin' | 'manager' | 'cashier', E
     managePayables: false,
     manageReturns: false,
     confirmBankDeposits: false,
+    exportFullBackup: false,
   },
 };
 
@@ -73,6 +76,7 @@ export function getEmployeePermissions(employee: Employee | null): EmployeePermi
       managePayables: false,
       manageReturns: false,
       confirmBankDeposits: false,
+      exportFullBackup: false,
     };
   }
 

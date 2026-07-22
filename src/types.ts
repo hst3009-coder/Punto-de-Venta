@@ -91,16 +91,30 @@ export interface AccountPayable {
   createdAt?: string;
 }
 
+export interface SupplierCreditNote {
+  id: string;
+  supplierName: string;
+  originalAmount: number;
+  remainingBalance: number;
+  reason: string;
+  linkedReturnId?: string; // si vino de una devolución a proveedor
+  status: 'active' | 'depleted';
+  employeeId?: string;
+  employeeName?: string;
+  createdAt?: string;
+}
+
 export interface PayablePayment {
   id: string;
   payableId: string;
   amount: number;
   date: string;
-  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentMethod: 'cash' | 'card' | 'transfer' | 'credit_note';
   employeeId?: string;
   employeeName?: string;
   createdAt?: string;
   bankAccountId?: string;
+  supplierCreditNoteId?: string;
 }
 
 export interface Bank {
@@ -140,12 +154,24 @@ export interface BankAccount {
   active: boolean;
 }
 
+export interface TicketConfig {
+  width: '58mm' | '80mm';
+  fontFamily: 'mono' | 'sans' | 'serif';
+  showLogo: boolean;
+  showSlogan: boolean;
+  showTaxBreakdown: boolean;
+  showEmployeeName: boolean;
+  showFooterMessage: boolean;
+  footerMessageText: string;
+}
+
 export interface DashboardConfig {
   id: string;
   cardFeePercent: number; // default 3.8
   holidays: string[]; // fechas YYYY-MM-DD de días feriados/no laborables
   paymentTypes?: PaymentTypeConfig[];
   bankAccounts?: BankAccount[];
+  ticketConfig?: TicketConfig;
 }
 
 export interface Closure {
@@ -185,12 +211,29 @@ export interface Customer {
   createdAt?: string;
 }
 
+export interface CreditNote {
+  id: string;
+  code: string; // código corto único, ej. 8 caracteres alfanuméricos en mayúscula
+  originalAmount: number;
+  remainingBalance: number;
+  status: 'active' | 'depleted' | 'voided';
+  createdFromRefundId?: string;
+  employeeId?: string;
+  employeeName?: string;
+  createdAt?: string;
+  voidReason?: string;
+  voidedAt?: string;
+  voidedByEmployeeId?: string;
+  voidedByEmployeeName?: string;
+}
+
 export interface CustomerRefund {
   id: string;
   saleId: string;
   ticketNumber: string;
   amount: number;
   method: 'cash' | 'credit_note' | 'credit_reduction';
+  creditNoteId?: string;
   customerId?: string; // solo si method es credit_reduction
   reason: string;
   date: string;
@@ -226,6 +269,7 @@ export interface EmployeePermissions {
   managePayables?: boolean;
   manageReturns?: boolean;
   confirmBankDeposits?: boolean;
+  exportFullBackup?: boolean;
 }
 
 export interface Employee {

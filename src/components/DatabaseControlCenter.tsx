@@ -52,6 +52,7 @@ type CollectionKey =
   | 'products'
   | 'sales'
   | 'supplierReturns'
+  | 'supplierCreditNotes'
   | 'suppliers';
 
 interface CollectionMetadata {
@@ -240,6 +241,20 @@ const COLLECTIONS: CollectionMetadata[] = [
       { name: 'reason', label: 'Motivo de Devolución', type: 'text', required: true },
       { name: 'date', label: 'Fecha Devolución', type: 'date', required: true },
       { name: 'refunded', label: 'Reembolsado', type: 'boolean', required: true }
+    ]
+  },
+  {
+    key: 'supplierCreditNotes',
+    label: 'Notas de Crédito de Proveedores',
+    description: 'Saldos a favor con proveedores',
+    icon: FileText,
+    color: 'from-emerald-550 to-emerald-600 bg-emerald-50 text-emerald-700',
+    fields: [
+      { name: 'supplierName', label: 'Proveedor', type: 'text', required: true },
+      { name: 'originalAmount', label: 'Monto Original ($)', type: 'number', required: true },
+      { name: 'remainingBalance', label: 'Saldo Disponible ($)', type: 'number', required: true },
+      { name: 'reason', label: 'Motivo / Concepto', type: 'text', required: true },
+      { name: 'status', label: 'Estado (active/depleted)', type: 'text', required: true }
     ]
   },
   {

@@ -35,6 +35,9 @@ service cloud.firestore {
     match /customerRefunds/{document} {
       allow read, write: if request.auth != null;
     }
+    match /creditNotes/{document} {
+      allow read, write: if request.auth != null;
+    }
     match /employees/{document} {
       allow read, write: if request.auth != null;
     }
@@ -54,6 +57,9 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
     match /supplierReturns/{document} {
+      allow read, write: if request.auth != null;
+    }
+    match /supplierCreditNotes/{document} {
       allow read, write: if request.auth != null;
     }
     match /suppliers/{document} {

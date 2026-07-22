@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund } from './types';
+import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote } from './types';
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
@@ -464,6 +464,18 @@ export default function App() {
     return [];
   });
 
+  const [creditNotes, setCreditNotes] = useState<CreditNote[]>(() => {
+    const saved = localStorage.getItem('pos_credit_notes');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return [];
+  });
+
   const [closures, setClosures] = useState<Closure[]>(() => {
     const saved = localStorage.getItem('pos_closures');
     if (saved) {
@@ -514,6 +526,18 @@ export default function App() {
 
   const [supplierReturns, setSupplierReturns] = useState<SupplierReturn[]>(() => {
     const saved = localStorage.getItem('pos_supplier_returns');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return [];
+  });
+
+  const [supplierCreditNotes, setSupplierCreditNotes] = useState<SupplierCreditNote[]>(() => {
+    const saved = localStorage.getItem('pos_supplier_credit_notes');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -694,12 +718,33 @@ export default function App() {
   }, [authUser]);
 
   useEffect(() => {
+    if (!authUser) return;
+    // Listen to live credit notes from Firestore
+    const unsubscribe = firestoreService.subscribeToCollection<CreditNote>(
+      'creditNotes',
+      (dbNotes) => {
+        setCreditNotes(dbNotes);
+        localStorage.setItem('pos_credit_notes', JSON.stringify(dbNotes));
+      },
+      (err) => {
+        console.error('Firestore credit notes subscription error:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [authUser]);
+
+  useEffect(() => {
     localStorage.setItem('pos_customer_payments', JSON.stringify(customerPayments));
   }, [customerPayments]);
 
   useEffect(() => {
     localStorage.setItem('pos_customer_refunds', JSON.stringify(customerRefunds));
   }, [customerRefunds]);
+
+  useEffect(() => {
+    localStorage.setItem('pos_credit_notes', JSON.stringify(creditNotes));
+  }, [creditNotes]);
 
   const handleAddCustomerRefund = async (refund: CustomerRefund) => {
     const updated = [refund, ...customerRefunds];
@@ -709,6 +754,28 @@ export default function App() {
       await firestoreService.setDocWithId('customerRefunds', refund.id, refund);
     } catch (err) {
       console.error('Error saving customer refund to Firestore:', err);
+    }
+  };
+
+  const handleAddCreditNote = async (note: CreditNote) => {
+    const updated = [note, ...creditNotes];
+    setCreditNotes(updated);
+    localStorage.setItem('pos_credit_notes', JSON.stringify(updated));
+    try {
+      await firestoreService.setDocWithId('creditNotes', note.id, note);
+    } catch (err) {
+      console.error('Error saving credit note to Firestore:', err);
+    }
+  };
+
+  const handleUpdateCreditNote = async (note: CreditNote) => {
+    const updated = creditNotes.map(cn => cn.id === note.id ? note : cn);
+    setCreditNotes(updated);
+    localStorage.setItem('pos_credit_notes', JSON.stringify(updated));
+    try {
+      await firestoreService.setDocWithId('creditNotes', note.id, note);
+    } catch (err) {
+      console.error('Error updating credit note in Firestore:', err);
     }
   };
 
@@ -829,6 +896,23 @@ export default function App() {
       },
       (err) => {
         console.error('Firestore supplierReturns subscription error:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    // Listen to live supplier credit notes from Firestore
+    const unsubscribe = firestoreService.subscribeToCollection<SupplierCreditNote>(
+      'supplierCreditNotes',
+      (dbNotes) => {
+        setSupplierCreditNotes(dbNotes);
+        localStorage.setItem('pos_supplier_credit_notes', JSON.stringify(dbNotes));
+      },
+      (err) => {
+        console.error('Firestore supplierCreditNotes subscription error:', err);
       }
     );
 
@@ -2116,6 +2200,8 @@ export default function App() {
         sales={salesHistory}
         customerPayments={customerPayments}
         customerRefunds={customerRefunds}
+        creditNotes={creditNotes}
+        onUpdateCreditNote={handleUpdateCreditNote}
         dashboardConfig={dashboardConfig}
       />
 
@@ -2142,6 +2228,7 @@ export default function App() {
         customers={customers}
         customerPayments={customerPayments}
         customerRefunds={customerRefunds}
+        creditNotes={creditNotes}
         employees={employees}
         closures={closures}
         movements={movements}
@@ -2155,6 +2242,7 @@ export default function App() {
         cardDeposits={cardDeposits}
         onOpenMenudo={() => setIsMenudoOpen(true)}
         supplierReturns={supplierReturns}
+        supplierCreditNotes={supplierCreditNotes}
       />
 
       {/* Expenses Modal */}
@@ -2180,6 +2268,18 @@ export default function App() {
         permissions={permissions}
         dashboardConfig={dashboardConfig}
         onUpdateDashboardConfig={handleUpdateDashboardConfig}
+        products={products}
+        customers={customers}
+        salesHistory={salesHistory}
+        customerPayments={customerPayments}
+        customerRefunds={customerRefunds}
+        payables={payables}
+        payablePayments={payablePayments}
+        creditNotes={creditNotes}
+        supplierCreditNotes={supplierCreditNotes}
+        movements={movements}
+        supplierReturns={supplierReturns}
+        closures={closures}
       />
 
       {/* Special Products Manager View */}
@@ -2237,6 +2337,9 @@ export default function App() {
         closures={closures}
         customerRefunds={customerRefunds}
         onAddCustomerRefund={handleAddCustomerRefund}
+        creditNotes={creditNotes}
+        onAddCreditNote={handleAddCreditNote}
+        dashboardConfig={dashboardConfig}
       />
 
       {/* 6. Generic Product Modal */}

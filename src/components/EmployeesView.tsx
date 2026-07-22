@@ -273,6 +273,7 @@ export const EmployeesView: React.FC = () => {
                   { key: 'managePayables', label: 'Cuentas por Pagar' },
                   { key: 'manageReturns', label: 'Devoluciones' },
                   { key: 'confirmBankDeposits', label: 'Confirmar Depósitos Bancarios' },
+                  { key: 'exportFullBackup', label: 'Respaldo Completo del Negocio' },
                 ].map((perm) => (
                   <label key={perm.key} className="flex items-center gap-2 group cursor-pointer">
                     <input
