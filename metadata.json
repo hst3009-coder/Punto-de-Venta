@@ -1,0 +1,6 @@
+{
+  "name": "Punto de Venta",
+  "description": "Sistema de Punto de Venta (POS) premium con ventana de ventas, filtros por categoría, buscador por código de barras, resumen de pedido interactivo y cobros con emisión de tickets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

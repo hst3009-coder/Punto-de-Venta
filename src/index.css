@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom print styles for the thermal receipt preview */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: #fff !important;
+  }
+
+  /* When printing the receipt, hide other things to keep the ticket isolated */
+  body:has(#thermal-ticket) * {
+    visibility: hidden !important;
+  }
+  body:has(#thermal-ticket) #thermal-ticket,
+  body:has(#thermal-ticket) #thermal-ticket * {
+    visibility: visible !important;
+  }
+  body:has(#thermal-ticket) #thermal-ticket {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 72mm !important; /* Narrower to fit standard 80mm (printable area 72mm) and 58mm paper beautifully */
+    max-width: 72mm !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+  }
+
+  /* Support fallback for browsers where :has isn't matched */
+  #thermal-ticket {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    padding: 2mm !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+}
