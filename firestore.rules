@@ -1,69 +1,69 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to collections for authenticated users
+    // Allow read/write access to collections for authorized user email
     match /accountsPayable/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /payablePayments/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /banks/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /cardDeposits/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /closures/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /config/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /configs/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /pending_sales/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /customers/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /customerPayments/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /customerRefunds/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /creditNotes/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /employees/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /movements/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /priceLists/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /productPrices/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /products/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /sales/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /supplierReturns/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /supplierCreditNotes/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /suppliers/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     
     // Default fallback rule
