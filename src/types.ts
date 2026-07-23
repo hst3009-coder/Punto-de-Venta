@@ -41,6 +41,7 @@ export interface PaymentBreakdownItem {
   amount: number;
   bankAccountId?: string;
   creditNoteCode?: string;
+  creditNoteId?: string;
 }
 
 export interface Sale {
@@ -364,4 +365,15 @@ export interface PendingSale {
   total: number;
   createdAt: string;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  action: 'close_shift_admin' | 'void_credit_note' | 'change_permissions';
+  description: string; // texto legible, ej. "Cerró el turno de Juan Pérez (pendiente de contar)"
+  employeeId?: string;
+  employeeName?: string;
+  targetEmployeeId?: string; // si aplica (a quién afectó la acción)
+  createdAt?: string;
+}
+
 

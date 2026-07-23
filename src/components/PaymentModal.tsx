@@ -320,7 +320,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       total,
       paymentMethod,
       paymentBreakdown: paymentMethod === 'mixed'
-        ? mixedBreakdown.map(r => ({ ...r, amount: Number(r.amount) || 0 }))
+        ? mixedBreakdown.map(r => {
+            const val = creditNoteValidations[r.id];
+            const matchedNote = val?.creditNote || (creditNotes || []).find(cn => cn.code.toUpperCase() === (val?.code || r.creditNoteCode)?.toUpperCase());
+            return {
+              ...r,
+              amount: Number(r.amount) || 0,
+              creditNoteCode: val?.code || r.creditNoteCode || matchedNote?.code,
+              creditNoteId: matchedNote?.id
+            };
+          })
         : undefined,
       amountPaid: paymentMethod === 'cash' ? amountPaid : (paymentMethod === 'mixed' ? mixedTotalEntered : (paymentMethod === 'credit' ? 0 : total)),
       change: paymentMethod === 'cash' ? change : (paymentMethod === 'mixed' ? mixedChangeAmount : 0),
@@ -334,36 +343,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       bankAccountId: paymentMethod === 'transfer' ? selectedBankAccountId || undefined : (paymentMethod === 'mixed' ? mixedBreakdown.find(r => r.method === 'transfer')?.bankAccountId || undefined : undefined),
     };
 
-    // 1. Submit sale
+    // 1. Submit sale (App.tsx handles sale + stock + credit notes updates atomically in runBatch)
     onSubmitSale(saleData);
-
-    // 2. Deduct credit note balances if used
-    if (paymentMethod === 'mixed') {
-      const creditNoteRows = mixedBreakdown.filter(r => r.method === 'credit_note');
-      for (const row of creditNoteRows) {
-        const val = creditNoteValidations[row.id];
-        if (val?.creditNote) {
-          const applied = roundCents(Number(row.amount) || 0);
-          const currentNote = (creditNotes || []).find(cn => cn.id === val.creditNote.id) || val.creditNote;
-          const newRemaining = roundCents(Math.max(0, currentNote.remainingBalance - applied));
-          const updatedNote: CreditNote = {
-            ...currentNote,
-            remainingBalance: newRemaining,
-            status: newRemaining === 0 ? 'depleted' : 'active',
-          };
-
-          try {
-            await firestoreService.setDocWithId('creditNotes', updatedNote.id, updatedNote);
-          } catch (err) {
-            console.error('Error updating CreditNote balance in Firestore:', err);
-          }
-
-          if (onUpdateCreditNote) {
-            onUpdateCreditNote(updatedNote);
-          }
-        }
-      }
-    }
 
     // 2. Print if requested
     if (shouldPrint) {

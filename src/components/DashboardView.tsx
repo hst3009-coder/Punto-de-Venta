@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Product, Sale, Customer, CustomerPayment, Employee, Closure, Movement, AccountPayable, PayablePayment, CardDeposit, DashboardConfig, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote } from '../types';
+import { Product, Sale, Customer, CustomerPayment, Employee, Closure, Movement, AccountPayable, PayablePayment, CardDeposit, DashboardConfig, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote, AuditLogEntry } from '../types';
 import { getCustomerDebt } from '../lib/customerDebt';
 import { getPayableBalance, getTotalPayablesBalance } from '../lib/payableDebt';
 import { getNextBusinessDay } from '../lib/businessDays';
@@ -65,8 +65,8 @@ import { getSaleTimestamp } from '../lib/dates';
 import { getPreTaxAmount, roundCents } from '../lib/money';
 import { getEmployeePermissions } from '../lib/permissions';
 import { firestoreService } from '../lib/firebase';
-import { PayablesView } from './PayablesView';
-import { ReturnsView } from './ReturnsView';
+const PayablesView = React.lazy(() => import('./PayablesView').then(m => ({ default: m.PayablesView })));
+const ReturnsView = React.lazy(() => import('./ReturnsView').then(m => ({ default: m.ReturnsView })));
 
 interface DashboardViewProps {
   isOpen: boolean;
@@ -354,6 +354,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       };
 
       await firestoreService.addDoc('closures', closureData);
+
+      // Audit Log for closing shift admin
+      try {
+        const auditData: Omit<AuditLogEntry, 'id'> = {
+          action: 'close_shift_admin',
+          description: `Cerró el turno de ${shift.employee.name} (pendiente de contar)`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: currentEmployee?.name || 'Administrador',
+          targetEmployeeId: shift.employee.id,
+          createdAt: new Date().toISOString()
+        };
+        await firestoreService.addDoc('auditLogs', auditData);
+      } catch (auditErr) {
+        console.error('Error recording audit log for close_shift_admin:', auditErr);
+      }
+
       await showAlert('Cierre Registrado', `El turno de ${shift.employee.name} ha sido cerrado. Recuerda registrar el conteo real en la sección "Cierres Pendientes de Contar" cuando cuentes el efectivo.`, 'success');
     } catch (err: any) {
       console.error('Error creating admin closure:', err);
@@ -2361,27 +2377,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* --- CUENTAS POR PAGAR TAB --- */}
         {activeTab === 'cuentas_pagar' && (
           <div className="max-w-7xl mx-auto h-full min-h-[500px]">
-            <PayablesView
-              products={products}
-              payables={payables}
-              payablePayments={payablePayments}
-              currentEmployee={currentEmployee}
-              dashboardConfig={dashboardConfig}
-              supplierCreditNotes={supplierCreditNotes}
-            />
+            <React.Suspense fallback={
+              <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-500 font-bold">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs">Cargando Cuentas por Pagar...</span>
+              </div>
+            }>
+              <PayablesView
+                products={products}
+                payables={payables}
+                payablePayments={payablePayments}
+                currentEmployee={currentEmployee}
+                dashboardConfig={dashboardConfig}
+                supplierCreditNotes={supplierCreditNotes}
+              />
+            </React.Suspense>
           </div>
         )}
 
         {/* --- DEVOLUCIONES TAB --- */}
         {activeTab === 'devoluciones' && (
           <div className="max-w-7xl mx-auto h-full min-h-[500px]">
-            <ReturnsView
-              products={products}
-              supplierReturns={supplierReturns}
-              currentEmployee={currentEmployee}
-              supplierCreditNotes={supplierCreditNotes}
-              payables={payables}
-            />
+            <React.Suspense fallback={
+              <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-500 font-bold">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs">Cargando Devoluciones...</span>
+              </div>
+            }>
+              <ReturnsView
+                products={products}
+                supplierReturns={supplierReturns}
+                currentEmployee={currentEmployee}
+                supplierCreditNotes={supplierCreditNotes}
+                payables={payables}
+              />
+            </React.Suspense>
           </div>
         )}
 
@@ -3650,6 +3680,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   };
 
                   await firestoreService.setDocWithId('creditNotes', updatedNote.id, updatedNote);
+
+                  // Audit Log for voiding credit note
+                  try {
+                    const auditData: Omit<AuditLogEntry, 'id'> = {
+                      action: 'void_credit_note',
+                      description: `Anuló la Nota de Crédito ${updatedNote.code}. Motivo: ${reason}`,
+                      employeeId: currentEmployee?.id || '',
+                      employeeName: currentEmployee?.name || 'Sistema',
+                      createdAt: new Date().toISOString()
+                    };
+                    await firestoreService.addDoc('auditLogs', auditData);
+                  } catch (auditErr) {
+                    console.error('Error recording audit log for void_credit_note:', auditErr);
+                  }
 
                   setNoteToVoid(null);
                   setVoidReasonInput('');

@@ -249,8 +249,18 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
     try {
       const newBalance = selectedPayableBalance - amt;
 
+      const operations: Array<{
+        type: 'set' | 'update' | 'delete';
+        collectionName: string;
+        id: string;
+        data?: any;
+        merge?: boolean;
+      }> = [];
+
       // 1. Create PayablePayment document
-      const paymentData: Partial<PayablePayment> = {
+      const paymentId = crypto.randomUUID();
+      const paymentData: PayablePayment = {
+        id: paymentId,
         payableId: selectedPayable.id,
         amount: amt,
         date: new Date().toISOString().split('T')[0],
@@ -261,28 +271,46 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
         employeeName: currentEmployee?.name || 'Sistema'
       };
 
-      await firestoreService.addDoc('payablePayments', paymentData);
+      operations.push({
+        type: 'set',
+        collectionName: 'payablePayments',
+        id: paymentId,
+        data: paymentData,
+        merge: true
+      });
 
       // 2. Update Supplier Credit Note if applicable
       if (paymentMethod === 'credit_note' && selectedCreditNote) {
         const newRemaining = Math.max(0, selectedCreditNote.remainingBalance - amt);
         const newStatus = newRemaining <= 0 ? 'depleted' : 'active';
-        await firestoreService.updateDoc('supplierCreditNotes', selectedCreditNote.id, {
-          remainingBalance: newRemaining,
-          status: newStatus
+        operations.push({
+          type: 'update',
+          collectionName: 'supplierCreditNotes',
+          id: selectedCreditNote.id,
+          data: {
+            remainingBalance: newRemaining,
+            status: newStatus
+          }
         });
       }
 
       // 3. Update status of the payable if fully paid
       if (newBalance <= 0) {
-        await firestoreService.updateDoc('accountsPayable', selectedPayable.id, {
-          status: 'paid'
+        operations.push({
+          type: 'update',
+          collectionName: 'accountsPayable',
+          id: selectedPayable.id,
+          data: {
+            status: 'paid'
+          }
         });
       }
 
       // 4. Create Movement automatically ONLY if CASH payment
       if (paymentMethod === 'cash') {
-        const movementData: Partial<Movement> = {
+        const movementId = crypto.randomUUID();
+        const movementData: Movement = {
+          id: movementId,
           type: 'out',
           expenseType: 'pago_factura',
           amount: amt,
@@ -296,8 +324,16 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
           isOperational: true
         };
 
-        await firestoreService.addDoc('movements', movementData);
+        operations.push({
+          type: 'set',
+          collectionName: 'movements',
+          id: movementId,
+          data: movementData,
+          merge: true
+        });
       }
+
+      await firestoreService.runBatch(operations);
 
       await showAlert('Éxito', 'Pago registrado correctamente.', 'success');
       setPaymentAmount('');

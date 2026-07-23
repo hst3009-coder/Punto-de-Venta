@@ -230,70 +230,77 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
     const sale = salesHistory.find((s) => s.id === cancellingSaleId);
     if (!sale) return;
 
-    // 1. Restore stock for ALL items in this invoice
-    const updatedProducts = products.map((p) => {
-      const saleItem = sale.items.find((item) => item.product.id === p.id);
-      if (saleItem) {
-        // Calculate remaining items that haven't been returned yet
-        const alreadyReturned = (sale as any).returnedItems?.filter((r: any) => r.productId === p.id)
+    const operations: Array<{
+      type: 'set' | 'update' | 'delete';
+      collectionName: string;
+      id: string;
+      data?: any;
+      merge?: boolean;
+    }> = [];
+
+    // 1. Calculate stock restorations
+    for (const item of sale.items) {
+      const prod = products.find((p) => p.id === item.product.id);
+      if (prod) {
+        const alreadyReturned = (sale as any).returnedItems?.filter((r: any) => r.productId === item.product.id)
           .reduce((sum: number, r: any) => sum + r.quantity, 0) || 0;
-        const qtyToRestore = Math.max(0, saleItem.quantity - alreadyReturned);
-        return { ...p, stock: p.stock + qtyToRestore };
-      }
-      return p;
-    });
-
-    onUpdateProducts(updatedProducts);
-    localStorage.setItem('pos_products', JSON.stringify(updatedProducts));
-
-    // Upload stocks to Firestore
-    try {
-      for (const item of sale.items) {
-        const prod = products.find((p) => p.id === item.product.id);
-        if (prod) {
-          const alreadyReturned = (sale as any).returnedItems?.filter((r: any) => r.productId === item.product.id)
-            .reduce((sum: number, r: any) => sum + r.quantity, 0) || 0;
-          const qtyToRestore = Math.max(0, item.quantity - alreadyReturned);
-          if (qtyToRestore > 0) {
-            await firestoreService.updateDoc('products', item.product.id, { stock: prod.stock + qtyToRestore });
-          }
+        const qtyToRestore = Math.max(0, item.quantity - alreadyReturned);
+        if (qtyToRestore > 0) {
+          operations.push({
+            type: 'update',
+            collectionName: 'products',
+            id: item.product.id,
+            data: { stock: prod.stock + qtyToRestore }
+          });
         }
       }
-    } catch (err) {
-      console.error('Error syncing restored stock to Firestore:', err);
     }
 
-    // 2. Mark sale as cancelled with justification
-    const updatedSales = salesHistory.map((s) => {
-      if (s.id === cancellingSaleId) {
-        return {
-          ...s,
-          isCancelled: true,
-          cancelReason: cancelJustification.trim(),
-          cancelledAt: new Date().toISOString(),
-        } as any;
-      }
-      return s;
+    // 2. Cancellation sale update
+    const cancelledSaleData = {
+      ...sale,
+      isCancelled: true,
+      cancelReason: cancelJustification.trim(),
+      cancelledAt: new Date().toISOString(),
+    };
+
+    operations.push({
+      type: 'set',
+      collectionName: 'sales',
+      id: cancelledSaleData.id,
+      data: cancelledSaleData,
+      merge: true
     });
 
-    onUpdateSalesHistory(updatedSales);
-    localStorage.setItem('pos_sales', JSON.stringify(updatedSales));
+    try {
+      await firestoreService.runBatch(operations);
 
-    // Save cancellation in Firestore
-    const currentCancelledSale = updatedSales.find((s) => s.id === cancellingSaleId);
-    if (currentCancelledSale) {
-      try {
-        await firestoreService.setDocWithId('sales', currentCancelledSale.id, currentCancelledSale);
-      } catch (err) {
-        console.error('Error updating sale cancellation in Firestore:', err);
-      }
-      setSelectedSale(currentCancelledSale);
+      // Local state update ONLY if runBatch succeeds
+      const updatedProducts = products.map((p) => {
+        const saleItem = sale.items.find((item) => item.product.id === p.id);
+        if (saleItem) {
+          const alreadyReturned = (sale as any).returnedItems?.filter((r: any) => r.productId === p.id)
+            .reduce((sum: number, r: any) => sum + r.quantity, 0) || 0;
+          const qtyToRestore = Math.max(0, saleItem.quantity - alreadyReturned);
+          return { ...p, stock: p.stock + qtyToRestore };
+        }
+        return p;
+      });
+      onUpdateProducts(updatedProducts);
+      localStorage.setItem('pos_products', JSON.stringify(updatedProducts));
+
+      const updatedSales = salesHistory.map((s) => s.id === cancellingSaleId ? cancelledSaleData : s);
+      onUpdateSalesHistory(updatedSales);
+      localStorage.setItem('pos_sales', JSON.stringify(updatedSales));
+
+      setSelectedSale(cancelledSaleData);
       setActiveReceiptView('return'); // Auto show return ticket
+      setIsCancelling(false);
+      setCancellingSaleId(null);
+    } catch (err) {
+      console.error('Error updating sale cancellation in Firestore:', err);
+      setCancelError('Error al cancelar la factura en la base de datos.');
     }
-
-    // Cleanup
-    setIsCancelling(false);
-    setCancellingSaleId(null);
   };
 
   // Handle Edit Payment Method
@@ -352,26 +359,7 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
       return;
     }
 
-    // 1. Update product stock (increment)
-    const updatedProducts = products.map((p) => {
-      if (p.id === returningItem.product.id) {
-        return { ...p, stock: p.stock + returningItemQty };
-      }
-      return p;
-    });
-    onUpdateProducts(updatedProducts);
-    localStorage.setItem('pos_products', JSON.stringify(updatedProducts));
-
-    try {
-      const prod = products.find((p) => p.id === returningItem.product.id);
-      if (prod) {
-        await firestoreService.updateDoc('products', returningItem.product.id, { stock: prod.stock + returningItemQty });
-      }
-    } catch (err) {
-      console.error('Error updating stock in Firestore for item return:', err);
-    }
-
-    // 2. Add item to returnedItems list in Sale
+    // 1. Prepare item return record
     const returnRecord = {
       productId: returningItem.product.id,
       productName: returningItem.product.name,
@@ -403,17 +391,7 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
       cancelReason: allReturned ? 'Devolución completa de todos los artículos.' : (selectedSale as any).cancelReason,
     };
 
-    const updatedSales = salesHistory.map((s) => s.id === selectedSale.id ? updatedSale : s);
-    onUpdateSalesHistory(updatedSales);
-    localStorage.setItem('pos_sales', JSON.stringify(updatedSales));
-
-    try {
-      await firestoreService.setDocWithId('sales', selectedSale.id, updatedSale);
-    } catch (err) {
-      console.error('Error saving item return record in Firestore:', err);
-    }
-
-    // 3. Create CustomerRefund record & optional CreditNote
+    // 2. Prepare CustomerRefund & optional CreditNote data
     const isCreditSale = Boolean(
       (selectedSale.paymentMethod === 'credit' ||
        selectedSale.isCredit ||
@@ -447,11 +425,6 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
         employeeName: currentEmployee?.name || clerkName,
         createdAt: now.toISOString(),
       };
-
-      if (onAddCreditNote) {
-        onAddCreditNote(createdCn);
-      }
-      setCreatedCreditNote(createdCn);
     }
 
     const refundRecord: CustomerRefund = {
@@ -469,13 +442,90 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
       createdAt: now.toISOString(),
     };
 
-    if (onAddCustomerRefund) {
-      onAddCustomerRefund(refundRecord);
+    // 3. Assemble atomic batch operations
+    const operations: Array<{
+      type: 'set' | 'update' | 'delete';
+      collectionName: string;
+      id: string;
+      data?: any;
+      merge?: boolean;
+    }> = [];
+
+    // Op A: Restore product stock
+    const prod = products.find((p) => p.id === returningItem.product.id);
+    if (prod) {
+      operations.push({
+        type: 'update',
+        collectionName: 'products',
+        id: returningItem.product.id,
+        data: { stock: prod.stock + returningItemQty }
+      });
     }
 
-    setSelectedSale(updatedSale);
-    setReturningItem(null);
-    setActiveReceiptView('return'); // view return ticket
+    // Op B: Update sale with returned items
+    operations.push({
+      type: 'set',
+      collectionName: 'sales',
+      id: selectedSale.id,
+      data: updatedSale,
+      merge: true
+    });
+
+    // Op C: Optional credit note creation
+    if (createdCn) {
+      operations.push({
+        type: 'set',
+        collectionName: 'creditNotes',
+        id: createdCn.id,
+        data: createdCn,
+        merge: true
+      });
+    }
+
+    // Op D: Customer refund record creation
+    operations.push({
+      type: 'set',
+      collectionName: 'customerRefunds',
+      id: refundRecord.id,
+      data: refundRecord,
+      merge: true
+    });
+
+    try {
+      await firestoreService.runBatch(operations);
+
+      // Local state updates ONLY when runBatch succeeds
+      const updatedProducts = products.map((p) => {
+        if (p.id === returningItem.product.id) {
+          return { ...p, stock: p.stock + returningItemQty };
+        }
+        return p;
+      });
+      onUpdateProducts(updatedProducts);
+      localStorage.setItem('pos_products', JSON.stringify(updatedProducts));
+
+      const updatedSales = salesHistory.map((s) => s.id === selectedSale.id ? updatedSale : s);
+      onUpdateSalesHistory(updatedSales);
+      localStorage.setItem('pos_sales', JSON.stringify(updatedSales));
+
+      if (createdCn) {
+        if (onAddCreditNote) {
+          onAddCreditNote(createdCn);
+        }
+        setCreatedCreditNote(createdCn);
+      }
+
+      if (onAddCustomerRefund) {
+        onAddCustomerRefund(refundRecord);
+      }
+
+      setSelectedSale(updatedSale);
+      setReturningItem(null);
+      setActiveReceiptView('return'); // view return ticket
+    } catch (err) {
+      console.error('Error processing item return batch in Firestore:', err);
+      setReturningItemError('Error al guardar la devolución en la base de datos.');
+    }
   };
 
   // Helper to format payment method

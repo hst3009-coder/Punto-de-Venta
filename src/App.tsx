@@ -3,16 +3,17 @@ import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
-import { PaymentModal } from './components/PaymentModal';
-import { AdminDrawer } from './components/AdminDrawer';
-import { DatabaseControlCenter } from './components/DatabaseControlCenter';
-import { CorteTurnoModal } from './components/CorteTurnoModal';
-import { TicketsModal } from './components/TicketsModal';
-import { ProductsView } from './components/products/ProductsView';
-import { CustomersView } from './components/CustomersView';
-import { DashboardView } from './components/DashboardView';
-import { ExpensesModal } from './components/ExpensesModal';
-import { MenudoModal } from './components/MenudoModal';
+// Lazy-loaded modules for code splitting and initial bundle size optimization
+const PaymentModal = React.lazy(() => import('./components/PaymentModal').then(m => ({ default: m.PaymentModal })));
+const CorteTurnoModal = React.lazy(() => import('./components/CorteTurnoModal').then(m => ({ default: m.CorteTurnoModal })));
+const TicketsModal = React.lazy(() => import('./components/TicketsModal').then(m => ({ default: m.TicketsModal })));
+const CustomersView = React.lazy(() => import('./components/CustomersView').then(m => ({ default: m.CustomersView })));
+const ExpensesModal = React.lazy(() => import('./components/ExpensesModal').then(m => ({ default: m.ExpensesModal })));
+const MenudoModal = React.lazy(() => import('./components/MenudoModal').then(m => ({ default: m.MenudoModal })));
+const AdminDrawer = React.lazy(() => import('./components/AdminDrawer').then(m => ({ default: m.AdminDrawer })));
+const DatabaseControlCenter = React.lazy(() => import('./components/DatabaseControlCenter').then(m => ({ default: m.DatabaseControlCenter })));
+const ProductsView = React.lazy(() => import('./components/products/ProductsView').then(m => ({ default: m.ProductsView })));
+const DashboardView = React.lazy(() => import('./components/DashboardView').then(m => ({ default: m.DashboardView })));
 import { firestoreService, authService } from './lib/firebase';
 import { roundCents, roundUpToNearestFive } from './lib/money';
 import { getSaleTimestamp } from './lib/dates';
@@ -717,6 +718,11 @@ export default function App() {
     return () => unsubscribe();
   }, [authUser]);
 
+  const saveCreditNotesToStorage = (notes: CreditNote[]) => {
+    const sanitized = notes.map(cn => ({ ...cn, code: undefined }));
+    localStorage.setItem('pos_credit_notes', JSON.stringify(sanitized));
+  };
+
   useEffect(() => {
     if (!authUser) return;
     // Listen to live credit notes from Firestore
@@ -724,7 +730,7 @@ export default function App() {
       'creditNotes',
       (dbNotes) => {
         setCreditNotes(dbNotes);
-        localStorage.setItem('pos_credit_notes', JSON.stringify(dbNotes));
+        saveCreditNotesToStorage(dbNotes);
       },
       (err) => {
         console.error('Firestore credit notes subscription error:', err);
@@ -743,35 +749,25 @@ export default function App() {
   }, [customerRefunds]);
 
   useEffect(() => {
-    localStorage.setItem('pos_credit_notes', JSON.stringify(creditNotes));
+    saveCreditNotesToStorage(creditNotes);
   }, [creditNotes]);
 
-  const handleAddCustomerRefund = async (refund: CustomerRefund) => {
+  const handleAddCustomerRefund = (refund: CustomerRefund) => {
     const updated = [refund, ...customerRefunds];
     setCustomerRefunds(updated);
     localStorage.setItem('pos_customer_refunds', JSON.stringify(updated));
-    try {
-      await firestoreService.setDocWithId('customerRefunds', refund.id, refund);
-    } catch (err) {
-      console.error('Error saving customer refund to Firestore:', err);
-    }
   };
 
-  const handleAddCreditNote = async (note: CreditNote) => {
+  const handleAddCreditNote = (note: CreditNote) => {
     const updated = [note, ...creditNotes];
     setCreditNotes(updated);
-    localStorage.setItem('pos_credit_notes', JSON.stringify(updated));
-    try {
-      await firestoreService.setDocWithId('creditNotes', note.id, note);
-    } catch (err) {
-      console.error('Error saving credit note to Firestore:', err);
-    }
+    saveCreditNotesToStorage(updated);
   };
 
   const handleUpdateCreditNote = async (note: CreditNote) => {
     const updated = creditNotes.map(cn => cn.id === note.id ? note : cn);
     setCreditNotes(updated);
-    localStorage.setItem('pos_credit_notes', JSON.stringify(updated));
+    saveCreditNotesToStorage(updated);
     try {
       await firestoreService.setDocWithId('creditNotes', note.id, note);
     } catch (err) {
@@ -1394,6 +1390,44 @@ export default function App() {
       return updatedSales;
     });
 
+    // Calculate credit note deductions from local state and prepare Firestore batch update operations
+    let updatedCreditNotes = [...creditNotes];
+    const creditNoteBatchOps: Array<{ id: string; remainingBalance: number; status: 'active' | 'depleted' | 'voided' }> = [];
+
+    if (saleWithEmployee.paymentBreakdown && saleWithEmployee.paymentBreakdown.length > 0) {
+      const cnRows = saleWithEmployee.paymentBreakdown.filter(b => b.method === 'credit_note' && (b.amount || 0) > 0);
+      for (const row of cnRows) {
+        const applied = roundCents(Number(row.amount) || 0);
+        const currentNote = updatedCreditNotes.find(cn => 
+          (row.creditNoteId && cn.id === row.creditNoteId) ||
+          (row.creditNoteCode && cn.code.toUpperCase() === row.creditNoteCode.toUpperCase())
+        );
+
+        if (currentNote) {
+          const newRemaining = roundCents(Math.max(0, currentNote.remainingBalance - applied));
+          const newStatus: 'active' | 'depleted' | 'voided' = newRemaining === 0 ? 'depleted' : 'active';
+
+          const updatedNote = {
+            ...currentNote,
+            remainingBalance: newRemaining,
+            status: newStatus,
+          };
+
+          updatedCreditNotes = updatedCreditNotes.map(cn => cn.id === currentNote.id ? updatedNote : cn);
+          creditNoteBatchOps.push({
+            id: currentNote.id,
+            remainingBalance: newRemaining,
+            status: newStatus,
+          });
+        }
+      }
+    }
+
+    if (creditNoteBatchOps.length > 0) {
+      setCreditNotes(updatedCreditNotes);
+      saveCreditNotesToStorage(updatedCreditNotes);
+    }
+
     try {
       const operations: Array<{
         type: 'set' | 'update' | 'delete';
@@ -1427,7 +1461,20 @@ export default function App() {
         }
       }
 
-      // Execute all operations atomically in a single batch
+      // 3. Add operations to deduct credit note balances in Firestore (atomically in the same batch)
+      for (const cnOp of creditNoteBatchOps) {
+        operations.push({
+          type: 'update',
+          collectionName: 'creditNotes',
+          id: cnOp.id,
+          data: {
+            remainingBalance: cnOp.remainingBalance,
+            status: cnOp.status,
+          }
+        });
+      }
+
+      // Execute all operations atomically in a single batch (sales + product stock + credit notes)
       await firestoreService.runBatch(operations);
     } catch (err) {
       console.error('Error completing sale in Firestore:', err);
@@ -2186,161 +2233,261 @@ export default function App() {
       {/* --- Modals and Drawers Layouts --- */}
       
       {/* 1. Payment Modal */}
-      <PaymentModal
-        isOpen={isPaymentOpen}
-        onClose={() => setIsPaymentOpen(false)}
-        cartItems={cart}
-        subtotal={totals.subtotal}
-        tax={totals.tax}
-        total={totals.total}
-        onSubmitSale={handleFinishSale}
-        clerkName={clerkName}
-        storeIdentity={storeIdentity}
-        customers={customers}
-        sales={salesHistory}
-        customerPayments={customerPayments}
-        customerRefunds={customerRefunds}
-        creditNotes={creditNotes}
-        onUpdateCreditNote={handleUpdateCreditNote}
-        dashboardConfig={dashboardConfig}
-      />
+      {isPaymentOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Módulo de Pago...</span>
+            </div>
+          </div>
+        }>
+          <PaymentModal
+            isOpen={isPaymentOpen}
+            onClose={() => setIsPaymentOpen(false)}
+            cartItems={cart}
+            subtotal={totals.subtotal}
+            tax={totals.tax}
+            total={totals.total}
+            onSubmitSale={handleFinishSale}
+            clerkName={clerkName}
+            storeIdentity={storeIdentity}
+            customers={customers}
+            sales={salesHistory}
+            customerPayments={customerPayments}
+            customerRefunds={customerRefunds}
+            creditNotes={creditNotes}
+            onUpdateCreditNote={handleUpdateCreditNote}
+            dashboardConfig={dashboardConfig}
+          />
+        </React.Suspense>
+      )}
 
       {/* Clientes View Manager Modal */}
-      <CustomersView
-        isOpen={isCustomersOpen}
-        onClose={handleCloseCustomers}
-        customers={customers}
-        sales={salesHistory}
-        clerkName={clerkName}
-        currentEmployee={currentEmployee}
-        customerPayments={customerPayments}
-        customerRefunds={customerRefunds}
-        preSelectedCustomerId={preSelectedCustomerId}
-        dashboardConfig={dashboardConfig}
-      />
+      {isCustomersOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Módulo de Clientes...</span>
+            </div>
+          </div>
+        }>
+          <CustomersView
+            isOpen={isCustomersOpen}
+            onClose={handleCloseCustomers}
+            customers={customers}
+            sales={salesHistory}
+            clerkName={clerkName}
+            currentEmployee={currentEmployee}
+            customerPayments={customerPayments}
+            customerRefunds={customerRefunds}
+            preSelectedCustomerId={preSelectedCustomerId}
+            dashboardConfig={dashboardConfig}
+          />
+        </React.Suspense>
+      )}
 
       {/* Dashboard View Manager Modal */}
-      <DashboardView
-        isOpen={showDashboard}
-        onClose={() => setShowDashboard(false)}
-        products={products}
-        sales={salesHistory}
-        customers={customers}
-        customerPayments={customerPayments}
-        customerRefunds={customerRefunds}
-        creditNotes={creditNotes}
-        employees={employees}
-        closures={closures}
-        movements={movements}
-        onNavigateToCustomer={handleNavigateToCustomer}
-        onNavigateToProduct={handleNavigateToProduct}
-        onOpenExpenses={() => setIsExpensesOpen(true)}
-        currentEmployee={currentEmployee}
-        payables={payables}
-        payablePayments={payablePayments}
-        dashboardConfig={dashboardConfig}
-        cardDeposits={cardDeposits}
-        onOpenMenudo={() => setIsMenudoOpen(true)}
-        supplierReturns={supplierReturns}
-        supplierCreditNotes={supplierCreditNotes}
-      />
+      {showDashboard && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Dashboard...</span>
+            </div>
+          </div>
+        }>
+          <DashboardView
+            isOpen={showDashboard}
+            onClose={() => setShowDashboard(false)}
+            products={products}
+            sales={salesHistory}
+            customers={customers}
+            customerPayments={customerPayments}
+            customerRefunds={customerRefunds}
+            creditNotes={creditNotes}
+            employees={employees}
+            closures={closures}
+            movements={movements}
+            onNavigateToCustomer={handleNavigateToCustomer}
+            onNavigateToProduct={handleNavigateToProduct}
+            onOpenExpenses={() => setIsExpensesOpen(true)}
+            currentEmployee={currentEmployee}
+            payables={payables}
+            payablePayments={payablePayments}
+            dashboardConfig={dashboardConfig}
+            cardDeposits={cardDeposits}
+            onOpenMenudo={() => setIsMenudoOpen(true)}
+            supplierReturns={supplierReturns}
+            supplierCreditNotes={supplierCreditNotes}
+          />
+        </React.Suspense>
+      )}
 
       {/* Expenses Modal */}
-      <ExpensesModal
-        isOpen={isExpensesOpen}
-        onClose={() => {
-          setIsExpensesOpen(false);
-          setExpensesForceCash(false);
-        }}
-        movements={movements}
-        currentEmployee={currentEmployee}
-        clerkName={clerkName}
-        forcePaymentMethod={expensesForceCash ? 'cash' : undefined}
-      />
+      {isExpensesOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Registro de Gastos...</span>
+            </div>
+          </div>
+        }>
+          <ExpensesModal
+            isOpen={isExpensesOpen}
+            onClose={() => {
+              setIsExpensesOpen(false);
+              setExpensesForceCash(false);
+            }}
+            movements={movements}
+            currentEmployee={currentEmployee}
+            clerkName={clerkName}
+            forcePaymentMethod={expensesForceCash ? 'cash' : undefined}
+          />
+        </React.Suspense>
+      )}
 
       {/* 2. Admin Slide Drawer */}
-      <AdminDrawer
-        isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
-        onOpenDatabase={() => setIsDbOpen(true)}
-        identity={storeIdentity}
-        onUpdateIdentity={handleUpdateIdentity}
-        permissions={permissions}
-        dashboardConfig={dashboardConfig}
-        onUpdateDashboardConfig={handleUpdateDashboardConfig}
-        products={products}
-        customers={customers}
-        salesHistory={salesHistory}
-        customerPayments={customerPayments}
-        customerRefunds={customerRefunds}
-        payables={payables}
-        payablePayments={payablePayments}
-        creditNotes={creditNotes}
-        supplierCreditNotes={supplierCreditNotes}
-        movements={movements}
-        supplierReturns={supplierReturns}
-        closures={closures}
-      />
+      {isAdminOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Panel de Administración...</span>
+            </div>
+          </div>
+        }>
+          <AdminDrawer
+            isOpen={isAdminOpen}
+            onClose={() => setIsAdminOpen(false)}
+            onOpenDatabase={() => setIsDbOpen(true)}
+            identity={storeIdentity}
+            onUpdateIdentity={handleUpdateIdentity}
+            permissions={permissions}
+            dashboardConfig={dashboardConfig}
+            onUpdateDashboardConfig={handleUpdateDashboardConfig}
+            products={products}
+            customers={customers}
+            salesHistory={salesHistory}
+            customerPayments={customerPayments}
+            customerRefunds={customerRefunds}
+            payables={payables}
+            payablePayments={payablePayments}
+            creditNotes={creditNotes}
+            supplierCreditNotes={supplierCreditNotes}
+            movements={movements}
+            supplierReturns={supplierReturns}
+            closures={closures}
+            currentEmployee={currentEmployee}
+          />
+        </React.Suspense>
+      )}
 
       {/* Special Products Manager View */}
-      <ProductsView
-        isOpen={isProductsManagerOpen}
-        onClose={handleCloseProductsManager}
-        products={products}
-        categories={categories}
-        onAddProduct={handleAddProduct}
-        onDeleteProduct={handleDeleteProduct}
-        sales={salesHistory}
-        initialTab={preSelectedProductTab}
-        initialProductId={preSelectedProductId}
-        permissions={permissions}
-      />
+      {isProductsManagerOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Catálogo de Productos...</span>
+            </div>
+          </div>
+        }>
+          <ProductsView
+            isOpen={isProductsManagerOpen}
+            onClose={handleCloseProductsManager}
+            products={products}
+            categories={categories}
+            onAddProduct={handleAddProduct}
+            onDeleteProduct={handleDeleteProduct}
+            sales={salesHistory}
+            initialTab={preSelectedProductTab}
+            initialProductId={preSelectedProductId}
+            permissions={permissions}
+          />
+        </React.Suspense>
+      )}
 
       {/* 3. Firestore Database Control Center Modal */}
-      <DatabaseControlCenter
-        isOpen={isDbOpen}
-        onClose={() => setIsDbOpen(false)}
-      />
+      {isDbOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Centro de Datos...</span>
+            </div>
+          </div>
+        }>
+          <DatabaseControlCenter
+            isOpen={isDbOpen}
+            onClose={() => setIsDbOpen(false)}
+          />
+        </React.Suspense>
+      )}
 
       {/* 4. Corte de Turno Modal */}
-      <CorteTurnoModal
-        isOpen={isCorteOpen}
-        onClose={() => {
-          setIsCorteOpen(false);
-          setMenudoTotalForCorte(null);
-        }}
-        salesHistory={salesHistory}
-        clerkName={clerkName}
-        currentEmployee={currentEmployee}
-        closures={closures}
-        movements={movements}
-        customerRefunds={customerRefunds}
-        onSuccess={() => {
-          handleCorteSuccess();
-          setMenudoTotalForCorte(null);
-        }}
-        externalCashTotal={menudoTotalForCorte}
-        onOpenMenudo={() => setIsMenudoOpen(true)}
-      />
+      {isCorteOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Corte de Turno...</span>
+            </div>
+          </div>
+        }>
+          <CorteTurnoModal
+            isOpen={isCorteOpen}
+            onClose={() => {
+              setIsCorteOpen(false);
+              setMenudoTotalForCorte(null);
+            }}
+            salesHistory={salesHistory}
+            clerkName={clerkName}
+            currentEmployee={currentEmployee}
+            closures={closures}
+            movements={movements}
+            customerRefunds={customerRefunds}
+            onSuccess={() => {
+              handleCorteSuccess();
+              setMenudoTotalForCorte(null);
+            }}
+            externalCashTotal={menudoTotalForCorte}
+            onOpenMenudo={() => setIsMenudoOpen(true)}
+          />
+        </React.Suspense>
+      )}
 
       {/* 5. Tickets History Modal */}
-      <TicketsModal
-        isOpen={isTicketsModalOpen}
-        onClose={() => setIsTicketsModalOpen(false)}
-        salesHistory={salesHistory}
-        onUpdateSalesHistory={(updatedSales) => setSalesHistory(updatedSales)}
-        products={products}
-        onUpdateProducts={(updatedProducts) => setProducts(updatedProducts)}
-        storeIdentity={storeIdentity}
-        clerkName={clerkName}
-        currentEmployee={currentEmployee}
-        closures={closures}
-        customerRefunds={customerRefunds}
-        onAddCustomerRefund={handleAddCustomerRefund}
-        creditNotes={creditNotes}
-        onAddCreditNote={handleAddCreditNote}
-        dashboardConfig={dashboardConfig}
-      />
+      {isTicketsModalOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Historial de Tickets...</span>
+            </div>
+          </div>
+        }>
+          <TicketsModal
+            isOpen={isTicketsModalOpen}
+            onClose={() => setIsTicketsModalOpen(false)}
+            salesHistory={salesHistory}
+            onUpdateSalesHistory={(updatedSales) => setSalesHistory(updatedSales)}
+            products={products}
+            onUpdateProducts={(updatedProducts) => setProducts(updatedProducts)}
+            storeIdentity={storeIdentity}
+            clerkName={clerkName}
+            currentEmployee={currentEmployee}
+            closures={closures}
+            customerRefunds={customerRefunds}
+            onAddCustomerRefund={handleAddCustomerRefund}
+            creditNotes={creditNotes}
+            onAddCreditNote={handleAddCreditNote}
+            dashboardConfig={dashboardConfig}
+          />
+        </React.Suspense>
+      )}
 
       {/* 6. Generic Product Modal */}
       {isGenericModalOpen && (
@@ -2449,15 +2596,26 @@ export default function App() {
       )}
 
       {/* 7. Menudo Modal */}
-      <MenudoModal
-        isOpen={isMenudoOpen}
-        onClose={() => setIsMenudoOpen(false)}
-        onApplyTotal={(total) => {
-          setMenudoTotalForCorte(total);
-          setIsCorteOpen(true);
-        }}
-        isCorteOpen={isCorteOpen}
-      />
+      {isMenudoOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Desglose de Efectivo...</span>
+            </div>
+          </div>
+        }>
+          <MenudoModal
+            isOpen={isMenudoOpen}
+            onClose={() => setIsMenudoOpen(false)}
+            onApplyTotal={(total) => {
+              setMenudoTotalForCorte(total);
+              setIsCorteOpen(true);
+            }}
+            isCorteOpen={isCorteOpen}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 }

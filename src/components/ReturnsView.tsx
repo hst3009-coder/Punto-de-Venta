@@ -193,9 +193,18 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
     setIsProcessingAccreditation(true);
 
     try {
+      const operations: Array<{
+        type: 'set' | 'update' | 'delete';
+        collectionName: string;
+        id: string;
+        data?: any;
+        merge?: boolean;
+      }> = [];
+
       if (method === 'credit_note') {
-        // Create SupplierCreditNote document
-        const creditNoteData: Omit<SupplierCreditNote, 'id'> = {
+        const creditNoteId = crypto.randomUUID();
+        const creditNoteData: SupplierCreditNote = {
+          id: creditNoteId,
           supplierName: returnToCredit.supplierName,
           originalAmount: returnToCredit.cost,
           remainingBalance: returnToCredit.cost,
@@ -207,13 +216,26 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
           createdAt: new Date().toISOString()
         };
 
-        await firestoreService.addDoc('supplierCreditNotes', creditNoteData);
+        operations.push({
+          type: 'set',
+          collectionName: 'supplierCreditNotes',
+          id: creditNoteId,
+          data: creditNoteData,
+          merge: true
+        });
       }
 
       // Mark supplierReturn as credited
-      await firestoreService.updateDoc('supplierReturns', returnToCredit.id, {
-        status: 'credited'
+      operations.push({
+        type: 'update',
+        collectionName: 'supplierReturns',
+        id: returnToCredit.id,
+        data: {
+          status: 'credited'
+        }
       });
+
+      await firestoreService.runBatch(operations);
 
       await realAlert.showAlert(
         'Devolución Acreditada',

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Category, Sale, EmployeePermissions } from '../../types';
-import { CatalogTab } from './CatalogTab';
+const CatalogTab = React.lazy(() => import('./CatalogTab').then(m => ({ default: m.CatalogTab })));
 import { ProductFormTab } from './ProductFormTab';
 import { StockAddTab } from './StockAddTab';
-import { InventoryTab } from './InventoryTab';
-import { KitsTab } from './KitsTab';
+const InventoryTab = React.lazy(() => import('./InventoryTab').then(m => ({ default: m.InventoryTab })));
+const KitsTab = React.lazy(() => import('./KitsTab').then(m => ({ default: m.KitsTab })));
 import { DepartmentsSuppliersTab } from './DepartmentsSuppliersTab';
-import { ProductSalesTab } from './ProductSalesTab';
+const ProductSalesTab = React.lazy(() => import('./ProductSalesTab').then(m => ({ default: m.ProductSalesTab })));
 import { firestoreService } from '../../lib/firebase';
 import { deleteField } from 'firebase/firestore';
 import { 
@@ -220,15 +220,22 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       {/* Main Content Pane */}
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {activeTab === 'catalog' && (
-          <CatalogTab
-            products={products}
-            categories={categories}
-            onEdit={handleEditClick}
-            onDeleteProduct={onDeleteProduct}
-            onAddProduct={onAddProduct}
-            permissions={permissions}
-            sales={sales}
-          />
+          <React.Suspense fallback={
+            <div className="p-8 text-center text-slate-500 font-bold flex items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span>Cargando Catálogo de Productos...</span>
+            </div>
+          }>
+            <CatalogTab
+              products={products}
+              categories={categories}
+              onEdit={handleEditClick}
+              onDeleteProduct={onDeleteProduct}
+              onAddProduct={onAddProduct}
+              permissions={permissions}
+              sales={sales}
+            />
+          </React.Suspense>
         )}
 
         {activeTab === 'edit' && (
@@ -251,19 +258,33 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         )}
 
         {activeTab === 'inventory' && (
-          <InventoryTab
-            products={products}
-            onBatchSuccess={() => {}}
-          />
+          <React.Suspense fallback={
+            <div className="p-8 text-center text-slate-500 font-bold flex items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span>Cargando Módulo de Inventario...</span>
+            </div>
+          }>
+            <InventoryTab
+              products={products}
+              onBatchSuccess={() => {}}
+            />
+          </React.Suspense>
         )}
 
         {activeTab === 'kits' && (
-          <KitsTab
-            products={products}
-            categories={categories}
-            onAddProduct={onAddProduct}
-            onDeleteProduct={onDeleteProduct}
-          />
+          <React.Suspense fallback={
+            <div className="p-8 text-center text-slate-500 font-bold flex items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span>Cargando Módulo de Combos...</span>
+            </div>
+          }>
+            <KitsTab
+              products={products}
+              categories={categories}
+              onAddProduct={onAddProduct}
+              onDeleteProduct={onDeleteProduct}
+            />
+          </React.Suspense>
         )}
 
         {activeTab === 'categories_suppliers' && (
@@ -274,10 +295,17 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         )}
 
         {activeTab === 'sales' && (
-          <ProductSalesTab
-            sales={sales}
-            products={products}
-          />
+          <React.Suspense fallback={
+            <div className="p-8 text-center text-slate-500 font-bold flex items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span>Cargando Módulo de Ventas por Producto...</span>
+            </div>
+          }>
+            <ProductSalesTab
+              sales={sales}
+              products={products}
+            />
+          </React.Suspense>
         )}
       </main>
 

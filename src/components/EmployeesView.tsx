@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Employee, EmployeePermissions } from '../types';
+import { Employee, EmployeePermissions, AuditLogEntry } from '../types';
 import { firestoreService } from '../lib/firebase';
 import { hashPin, verifyPin } from '../lib/crypto';
 import { ROLE_DEFAULT_PERMISSIONS } from '../lib/permissions';
 import { User, Plus, Edit2, Shield, Key, Check, X, ToggleLeft, ToggleRight, UserCheck, UserX, RefreshCw } from 'lucide-react';
 
-export const EmployeesView: React.FC = () => {
+interface EmployeesViewProps {
+  currentEmployee?: Employee;
+}
+
+export const EmployeesView: React.FC<EmployeesViewProps> = ({ currentEmployee }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +162,9 @@ export const EmployeesView: React.FC = () => {
             }
           }
         }
+        const targetEmp = employees.find(emp => emp.id === editingId);
+        const permissionsChanged = !targetEmp || JSON.stringify(targetEmp.permissions) !== JSON.stringify(permissions);
+
         const updateData: any = {
           name,
           role,
@@ -166,6 +173,23 @@ export const EmployeesView: React.FC = () => {
           ...pinData
         };
         await firestoreService.updateDoc('employees', editingId, updateData);
+
+        if (permissionsChanged) {
+          try {
+            const auditData: Omit<AuditLogEntry, 'id'> = {
+              action: 'change_permissions',
+              description: `Se modificaron los permisos del empleado ${name}`,
+              employeeId: currentEmployee?.id || '',
+              employeeName: currentEmployee?.name || 'Administrador',
+              targetEmployeeId: editingId,
+              createdAt: new Date().toISOString()
+            };
+            await firestoreService.addDoc('auditLogs', auditData);
+          } catch (auditErr) {
+            console.error('Error recording audit log for change_permissions:', auditErr);
+          }
+        }
+
         showSuccess('Empleado actualizado correctamente.');
       } else {
         const newEmployee: Omit<Employee, 'id'> = {

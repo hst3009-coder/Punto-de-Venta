@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { useAlert } from '../../context/AlertContext';
 import { firestoreService } from '../../lib/firebase';
 import { roundCents } from '../../lib/money';
-import { ImportWizardModal } from './ImportWizardModal';
+const ImportWizardModal = React.lazy(() => import('./ImportWizardModal').then(m => ({ default: m.ImportWizardModal })));
 import { 
   Search, 
   Barcode, 
@@ -55,8 +55,29 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isImportWizardOpen, setIsImportWizardOpen] = useState(false);
+
+  // Inline editing state
+  type InlineField = 'price' | 'category' | 'provider' | 'code' | 'sku' | 'cost';
+  interface ActiveInlineEdit {
+    productId: string;
+    field: InlineField;
+    value: string;
+    originalValue: any;
+  }
+  interface InlineFeedback {
+    productId: string;
+    field: InlineField;
+    type: 'success' | 'error';
+  }
+
+  const [activeEdit, setActiveEdit] = useState<ActiveInlineEdit | null>(null);
+  const [feedback, setFeedback] = useState<InlineFeedback | null>(null);
+  const activeEditRef = useRef<ActiveInlineEdit | null>(null);
+  activeEditRef.current = activeEdit;
 
   // Compute recentSalesCount map for the last 30 days
   const recentSalesCount = useMemo(() => {
@@ -108,6 +129,134 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
     });
     return Array.from(set).sort();
   }, [products]);
+
+  // Combined categories list (for datalist suggestions)
+  const allCategoryNames = useMemo(() => {
+    const set = new Set<string>(categoriesList);
+    categories.forEach((c) => {
+      if (c.name && c.name.trim()) set.add(c.name.trim());
+    });
+    return Array.from(set).sort();
+  }, [categoriesList, categories]);
+
+  const renderFeedbackIcon = (productId: string, field: InlineField) => {
+    if (!feedback || feedback.productId !== productId || feedback.field !== field) return null;
+
+    if (feedback.type === 'success') {
+      return (
+        <span className="inline-flex items-center justify-center p-0.5 bg-emerald-100 text-emerald-600 rounded-full animate-bounce shrink-0 ml-1" title="Guardado exitosamente">
+          <Check className="w-3 h-3 stroke-[3]" />
+        </span>
+      );
+    }
+
+    if (feedback.type === 'error') {
+      return (
+        <span className="inline-flex items-center justify-center p-0.5 bg-rose-100 text-rose-600 rounded-full animate-pulse shrink-0 ml-1" title="Error al guardar">
+          <AlertTriangle className="w-3 h-3 stroke-[2.5]" />
+        </span>
+      );
+    }
+
+    return null;
+  };
+
+  const saveCurrentEdit = async (editToSave = activeEditRef.current): Promise<boolean> => {
+    if (!editToSave) return true;
+
+    const { productId, field, value } = editToSave;
+    const prod = products.find(p => p.id === productId);
+    if (!prod) {
+      setActiveEdit(null);
+      return true;
+    }
+
+    let updatedValue: any = value.trim();
+
+    if (field === 'price' || field === 'cost') {
+      const num = parseFloat(value);
+      if (isNaN(num) || num < 0) {
+        setActiveEdit(null);
+        return false;
+      }
+      updatedValue = roundCents(num);
+      const currentVal = field === 'price' ? prod.price : (prod.cost || 0);
+      if (updatedValue === currentVal) {
+        setActiveEdit(null);
+        return true;
+      }
+    } else {
+      const currentVal = String(prod[field as keyof Product] || '').trim();
+      if (updatedValue === currentVal) {
+        setActiveEdit(null);
+        return true;
+      }
+    }
+
+    setActiveEdit(null);
+
+    const updateData: Partial<Product> = {
+      [field]: updatedValue
+    };
+
+    try {
+      await firestoreService.updateDoc('products', productId, updateData);
+      
+      const updatedProd: Product = {
+        ...prod,
+        ...updateData
+      };
+      onAddProduct(updatedProd);
+
+      setFeedback({ productId, field, type: 'success' });
+      setTimeout(() => {
+        setFeedback(prev => (prev?.productId === productId && prev?.field === field ? null : prev));
+      }, 1800);
+
+      return true;
+    } catch (err) {
+      console.error(`Error inline updating ${field} for product ${productId}:`, err);
+      
+      setFeedback({ productId, field, type: 'error' });
+      setTimeout(() => {
+        setFeedback(prev => (prev?.productId === productId && prev?.field === field ? null : prev));
+      }, 2500);
+
+      showAlert(
+        'Error de Guardado',
+        `No se pudo actualizar el campo. Revisa tu conexión e intenta de nuevo.`,
+        'error'
+      );
+      return false;
+    }
+  };
+
+  const handleStartEdit = async (prod: Product, field: InlineField) => {
+    if (!permissions.manageProducts) return;
+
+    if (activeEditRef.current && activeEditRef.current.productId === prod.id && activeEditRef.current.field === field) {
+      return;
+    }
+
+    if (activeEditRef.current) {
+      await saveCurrentEdit(activeEditRef.current);
+    }
+
+    let initialVal = '';
+    if (field === 'price') initialVal = prod.price !== undefined ? String(prod.price) : '0';
+    else if (field === 'cost') initialVal = prod.cost !== undefined ? String(prod.cost) : '0';
+    else if (field === 'category') initialVal = prod.category || '';
+    else if (field === 'provider') initialVal = prod.provider || '';
+    else if (field === 'code') initialVal = prod.code || prod.barcode || '';
+    else if (field === 'sku') initialVal = prod.sku || '';
+
+    setActiveEdit({
+      productId: prod.id,
+      field,
+      value: initialVal,
+      originalValue: prod[field as keyof Product] ?? ''
+    });
+  };
 
   // Filter products by search & category
   const filteredProducts = useMemo(() => {
@@ -480,44 +629,96 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
       </div>
 
       {/* 2. SUB BAR: Search & Category Filter Pills */}
-      <div className="p-4 bg-white border-b border-slate-200/80 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, SKU, código, categoría, proveedor..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:bg-white rounded-xl text-xs font-semibold text-slate-850 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all"
-          />
-        </div>
-
-        <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0 shrink-0">
+      <div className="p-4 bg-white border-b border-slate-200/80 flex items-center justify-between shrink-0 gap-3">
+        {!isSearchExpanded ? (
+          /* Collapsed Search Icon Button */
           <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-              selectedCategory === 'all'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
+            type="button"
+            onClick={() => {
+              setIsSearchExpanded(true);
+              setTimeout(() => searchInputRef.current?.focus(), 0);
+            }}
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-bold shrink-0"
+            title="Buscar productos"
           >
-            Todas las Categorías
+            <Search className="w-4 h-4 text-slate-600" />
+            <span className="hidden sm:inline text-slate-500 font-medium">Buscar...</span>
           </button>
-          {categoriesList.map((cat) => (
+        ) : (
+          /* Expanded Search Bar */
+          <div className="relative flex-1 flex items-center gap-2 max-w-2xl animate-fade-in">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                autoFocus
+                placeholder="Buscar por nombre, SKU, código, categoría, proveedor..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onBlur={() => {
+                  if (!searchQuery.trim()) {
+                    setIsSearchExpanded(false);
+                  }
+                }}
+                className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-200 focus:bg-white rounded-xl text-xs font-semibold text-slate-850 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  title="Limpiar texto"
+                >
+                  <XIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
             <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
-                selectedCategory === cat
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setSearchQuery('');
+                setIsSearchExpanded(false);
+              }}
+              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
+              title="Cerrar búsqueda"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Category Pills (Hidden when search is expanded) */}
+        {!isSearchExpanded && (
+          <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0 shrink-0">
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
+                selectedCategory === 'all'
                   ? 'bg-slate-900 text-white shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <span>📁</span>
-              <span>{cat}</span>
+              Todas las Categorías
             </button>
-          ))}
-        </div>
+            {categoriesList.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                  selectedCategory === cat
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <span>📁</span>
+                <span>{cat}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 3. PRODUCT CATALOG TABLE VIEW */}
@@ -783,17 +984,86 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                               </div>
                               
                               <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-black uppercase">
-                                  {prod.category}
+                                {/* Category Badge */}
+                                <span 
+                                  onClick={() => handleStartEdit(prod, 'category')}
+                                  className={`text-[8px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-black uppercase transition-all ${
+                                    permissions.manageProducts ? 'hover:bg-indigo-50 hover:text-indigo-700 cursor-pointer' : ''
+                                  }`}
+                                  title={permissions.manageProducts ? 'Clic para editar categoría' : undefined}
+                                >
+                                  {prod.category || 'Sin categoría'}
                                 </span>
-                                {prod.sku && (
-                                  <span className="text-[8px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-bold">
-                                    SKU: {prod.sku}
-                                  </span>
+
+                                {/* SKU Badge or Editor */}
+                                {activeEdit?.productId === prod.id && activeEdit?.field === 'sku' ? (
+                                  <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+                                    <span className="text-[8px] font-bold text-indigo-600">SKU:</span>
+                                    <input
+                                      type="text"
+                                      value={activeEdit.value}
+                                      onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
+                                        if (e.key === 'Escape') { e.preventDefault(); setActiveEdit(null); }
+                                      }}
+                                      onBlur={() => saveCurrentEdit()}
+                                      autoFocus
+                                      onFocus={(e) => e.target.select()}
+                                      placeholder="SKU"
+                                      className="w-24 px-1.5 py-0.5 text-[10px] border border-indigo-500 rounded focus:outline-none bg-white font-mono"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="inline-flex items-center">
+                                    <span
+                                      onClick={() => handleStartEdit(prod, 'sku')}
+                                      className={`text-[8px] px-1.5 py-0.5 rounded font-bold transition-all ${
+                                        prod.sku
+                                          ? 'bg-indigo-50 text-indigo-600'
+                                          : 'bg-slate-100/80 text-slate-400 hover:text-slate-600'
+                                      } ${permissions.manageProducts ? 'hover:ring-1 hover:ring-indigo-300 cursor-pointer' : ''}`}
+                                      title={permissions.manageProducts ? 'Clic para editar SKU' : undefined}
+                                    >
+                                      {prod.sku ? `SKU: ${prod.sku}` : '+ SKU'}
+                                    </span>
+                                    {renderFeedbackIcon(prod.id, 'sku')}
+                                  </div>
                                 )}
-                                <span className="text-[9px] text-slate-400 font-mono font-bold block uppercase">
-                                  #{prod.code || prod.barcode || prod.id}
-                                </span>
+
+                                {/* CODE Badge or Editor */}
+                                {activeEdit?.productId === prod.id && activeEdit?.field === 'code' ? (
+                                  <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+                                    <span className="text-[9px] text-slate-400 font-mono font-bold">#</span>
+                                    <input
+                                      type="text"
+                                      value={activeEdit.value}
+                                      onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
+                                        if (e.key === 'Escape') { e.preventDefault(); setActiveEdit(null); }
+                                      }}
+                                      onBlur={() => saveCurrentEdit()}
+                                      autoFocus
+                                      onFocus={(e) => e.target.select()}
+                                      placeholder="Código"
+                                      className="w-28 px-1.5 py-0.5 text-[10px] border border-indigo-500 rounded focus:outline-none bg-white font-mono"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="inline-flex items-center">
+                                    <span
+                                      onClick={() => handleStartEdit(prod, 'code')}
+                                      className={`text-[9px] text-slate-400 font-mono font-bold block uppercase transition-all px-1 rounded ${
+                                        permissions.manageProducts ? 'hover:bg-slate-100 hover:text-slate-700 hover:ring-1 hover:ring-slate-300 cursor-pointer' : ''
+                                      }`}
+                                      title={permissions.manageProducts ? 'Clic para editar código' : undefined}
+                                    >
+                                      #{prod.code || prod.barcode || prod.id}
+                                    </span>
+                                    {renderFeedbackIcon(prod.id, 'code')}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -801,19 +1071,89 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
 
                         {/* 2. Categoría */}
                         <td className="py-3.5 px-4 font-bold text-slate-650">
-                          <span className="bg-slate-100/60 px-2 py-1 rounded-lg text-[10px] text-slate-700">
-                            {prod.category}
-                          </span>
+                          {activeEdit?.productId === prod.id && activeEdit?.field === 'category' ? (
+                            <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                list={`category-list-${prod.id}`}
+                                value={activeEdit.value}
+                                onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
+                                  if (e.key === 'Escape') { e.preventDefault(); setActiveEdit(null); }
+                                }}
+                                onBlur={() => saveCurrentEdit()}
+                                autoFocus
+                                placeholder="Categoría..."
+                                className="w-32 px-2 py-1 text-xs border border-indigo-500 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-bold"
+                              />
+                              <datalist id={`category-list-${prod.id}`}>
+                                {allCategoryNames.map(c => <option key={c} value={c} />)}
+                              </datalist>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 group/cell">
+                              <span
+                                onClick={() => handleStartEdit(prod, 'category')}
+                                className={`bg-slate-100/60 px-2 py-1 rounded-lg text-[10px] text-slate-700 transition-all ${
+                                  permissions.manageProducts ? 'hover:bg-indigo-50 hover:text-indigo-700 hover:ring-1 hover:ring-indigo-300 cursor-pointer' : ''
+                                }`}
+                                title={permissions.manageProducts ? 'Clic para editar categoría' : undefined}
+                              >
+                                {prod.category || 'Sin Categoría'}
+                              </span>
+                              {renderFeedbackIcon(prod.id, 'category')}
+                            </div>
+                          )}
                         </td>
 
                         {/* 3. Proveedor */}
                         <td className="py-3.5 px-4 font-bold text-slate-650">
-                          {prod.provider ? (
-                            <span className="bg-slate-100/60 px-2 py-1 rounded-lg text-[10px] text-slate-700">
-                              {prod.provider}
-                            </span>
+                          {activeEdit?.productId === prod.id && activeEdit?.field === 'provider' ? (
+                            <div className="relative flex items-center gap-1 min-w-[160px]" onMouseDown={(e) => e.stopPropagation()}>
+                              <SupplierPicker
+                                value={activeEdit.value}
+                                onChange={(val) => setActiveEdit(prev => prev ? { ...prev, value: val } : null)}
+                                products={products}
+                                placeholder="Proveedor..."
+                                className="w-36 text-xs"
+                              />
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => saveCurrentEdit()}
+                                className="p-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md cursor-pointer shrink-0"
+                                title="Guardar"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => setActiveEdit(null)}
+                                className="p-1 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-md cursor-pointer shrink-0"
+                                title="Cancelar"
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </button>
+                            </div>
                           ) : (
-                            <span className="text-slate-350 italic text-[11px]">No asignado</span>
+                            <div className="flex items-center gap-1 group/cell">
+                              <span
+                                onClick={() => handleStartEdit(prod, 'provider')}
+                                className={`px-2 py-1 rounded-lg text-[10px] text-slate-700 bg-slate-100/60 transition-all ${
+                                  permissions.manageProducts ? 'hover:bg-indigo-50 hover:text-indigo-700 hover:ring-1 hover:ring-indigo-300 cursor-pointer' : ''
+                                }`}
+                                title={permissions.manageProducts ? 'Clic para editar proveedor' : undefined}
+                              >
+                                {prod.provider ? (
+                                  prod.provider
+                                ) : (
+                                  <span className="text-slate-350 italic text-[11px]">No asignado</span>
+                                )}
+                              </span>
+                              {renderFeedbackIcon(prod.id, 'provider')}
+                            </div>
                           )}
                         </td>
 
@@ -832,12 +1172,76 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
 
                         {/* 5. Costo */}
                         <td className="py-3.5 px-4 text-right font-bold text-slate-600 font-mono">
-                          RD$ {cost.toFixed(2)}
+                          {activeEdit?.productId === prod.id && activeEdit?.field === 'cost' ? (
+                            <div className="flex items-center justify-end gap-1" onMouseDown={(e) => e.stopPropagation()}>
+                              <span className="text-xs font-bold text-slate-400">RD$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={activeEdit.value}
+                                onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
+                                  if (e.key === 'Escape') { e.preventDefault(); setActiveEdit(null); }
+                                }}
+                                onBlur={() => saveCurrentEdit()}
+                                autoFocus
+                                onFocus={(e) => e.target.select()}
+                                className="w-20 px-1.5 py-1 text-xs border border-indigo-500 rounded-lg text-right font-mono font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1.5 group/cell">
+                              <span
+                                onClick={() => handleStartEdit(prod, 'cost')}
+                                className={`font-bold text-slate-600 font-mono px-1.5 py-0.5 rounded transition-all ${
+                                  permissions.manageProducts ? 'hover:bg-indigo-50 hover:text-indigo-700 hover:ring-1 hover:ring-indigo-300 cursor-pointer' : ''
+                                }`}
+                                title={permissions.manageProducts ? 'Clic para editar costo' : undefined}
+                              >
+                                RD$ {cost.toFixed(2)}
+                              </span>
+                              {renderFeedbackIcon(prod.id, 'cost')}
+                            </div>
+                          )}
                         </td>
 
                         {/* 6. Venta */}
                         <td className="py-3.5 px-4 text-right font-black text-slate-850 font-mono text-xs">
-                          RD$ {prod.price.toFixed(2)}
+                          {activeEdit?.productId === prod.id && activeEdit?.field === 'price' ? (
+                            <div className="flex items-center justify-end gap-1" onMouseDown={(e) => e.stopPropagation()}>
+                              <span className="text-xs font-bold text-slate-400">RD$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={activeEdit.value}
+                                onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
+                                  if (e.key === 'Escape') { e.preventDefault(); setActiveEdit(null); }
+                                }}
+                                onBlur={() => saveCurrentEdit()}
+                                autoFocus
+                                onFocus={(e) => e.target.select()}
+                                className="w-20 px-1.5 py-1 text-xs border border-indigo-500 rounded-lg text-right font-mono font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1.5 group/cell">
+                              <span
+                                onClick={() => handleStartEdit(prod, 'price')}
+                                className={`font-black text-slate-850 font-mono text-xs px-1.5 py-0.5 rounded transition-all ${
+                                  permissions.manageProducts ? 'hover:bg-indigo-50 hover:text-indigo-700 hover:ring-1 hover:ring-indigo-300 cursor-pointer' : ''
+                                }`}
+                                title={permissions.manageProducts ? 'Clic para editar precio' : undefined}
+                              >
+                                RD$ {prod.price.toFixed(2)}
+                              </span>
+                              {renderFeedbackIcon(prod.id, 'price')}
+                            </div>
+                          )}
                         </td>
 
                         {/* 7. % Ganancia */}
@@ -923,12 +1327,23 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
         )}
       </div>
 
-      <ImportWizardModal 
-        isOpen={isImportWizardOpen}
-        onClose={() => setIsImportWizardOpen(false)}
-        products={products}
-        categories={categories}
-      />
+      {isImportWizardOpen && (
+        <React.Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl border border-slate-100">
+              <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold text-slate-600">Cargando Asistente de Importación...</span>
+            </div>
+          </div>
+        }>
+          <ImportWizardModal 
+            isOpen={isImportWizardOpen}
+            onClose={() => setIsImportWizardOpen(false)}
+            products={products}
+            categories={categories}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };
