@@ -2449,6 +2449,7 @@ export default function App() {
             closures={closures}
             movements={movements}
             customerRefunds={customerRefunds}
+            dashboardConfig={dashboardConfig}
             onSuccess={() => {
               handleCorteSuccess();
               setMenudoTotalForCorte(null);

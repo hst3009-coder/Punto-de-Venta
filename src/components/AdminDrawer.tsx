@@ -665,6 +665,26 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                   <p className="text-[10px] text-slate-400 font-semibold">Tasa estándar descontada automáticamente para el cálculo de depósitos netos.</p>
                 </div>
 
+                {/* Efectivo Inicial Configurable */}
+                <div className="space-y-1.5 pt-3 border-t border-slate-200">
+                  <label className="text-xs font-bold text-slate-500 block">Efectivo Inicial por Defecto (RD$)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={dashboardConfig?.defaultInitialCash ?? 500}
+                      onChange={(e) => onUpdateDashboardConfig({
+                        ...dashboardConfig,
+                        defaultInitialCash: parseFloat(e.target.value) || 0
+                      })}
+                      className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">RD$</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-semibold">Monto precargado para el efectivo inicial en la apertura y corte de turno/caja.</p>
+                </div>
+
                 {/* Listado de Feriados */}
                 <div className="space-y-3 pt-3 border-t border-slate-200">
                   <div className="flex items-center gap-2">

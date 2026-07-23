@@ -31,7 +31,8 @@ import {
   X,
   Landmark,
   FileBarChart,
-  Ban
+  Ban,
+  Search
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -132,6 +133,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [creditNoteStatusFilter, setCreditNoteStatusFilter] = useState<'all' | 'active' | 'depleted' | 'voided'>('all');
   const [noteToVoid, setNoteToVoid] = useState<CreditNote | null>(null);
   const [voidReasonInput, setVoidReasonInput] = useState('');
+
+  // Credit Note Lookup Modal state (Query only)
+  const [isQueryCreditNoteOpen, setIsQueryCreditNoteOpen] = useState(false);
+  const [queryCreditNoteCode, setQueryCreditNoteCode] = useState('');
+  const [queryCreditNoteResult, setQueryCreditNoteResult] = useState<CreditNote | 'not_found' | null>(null);
 
   // --- Auto-create CardDeposit entries for card sales ---
   useEffect(() => {
@@ -3307,6 +3313,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     Gestión de notas de crédito emitidas por devoluciones y saldo disponible para canje en ventas.
                   </p>
                 </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsQueryCreditNoteOpen(true);
+                      setQueryCreditNoteCode('');
+                      setQueryCreditNoteResult(null);
+                    }}
+                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs flex items-center gap-2"
+                  >
+                    <Search className="w-4 h-4" />
+                    <span>Consultar Nota de Crédito</span>
+                  </button>
+                </div>
               </div>
 
               {/* Top Metric Cards */}
@@ -3754,6 +3774,159 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Consultar Saldo de Nota de Crédito (Solo lectura) */}
+      {isQueryCreditNoteOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Search className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-sm uppercase tracking-wide">Consultar Nota de Crédito</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">Verifica el saldo disponible y estado de la nota sin realizar cambios</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsQueryCreditNoteOpen(false);
+                  setQueryCreditNoteCode('');
+                  setQueryCreditNoteResult(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5">
+              {/* Search Form */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const clean = queryCreditNoteCode.trim().toUpperCase();
+                  if (!clean) return;
+                  const found = creditNotes.find(cn => (cn.code || '').trim().toUpperCase() === clean);
+                  setQueryCreditNoteResult(found || 'not_found');
+                }}
+                className="space-y-3"
+              >
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-1.5">
+                    Código de Nota de Crédito
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Ej. A1B2C3D4"
+                      value={queryCreditNoteCode}
+                      onChange={(e) => {
+                        setQueryCreditNoteCode(e.target.value);
+                        if (queryCreditNoteResult !== null) setQueryCreditNoteResult(null);
+                      }}
+                      className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white placeholder-slate-400 uppercase"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!queryCreditNoteCode.trim()}
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                    >
+                      <Search className="w-4 h-4" />
+                      <span>Buscar</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* Result View */}
+              {queryCreditNoteResult === 'not_found' && (
+                <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-4 text-center space-y-1 animate-fade-in">
+                  <div className="flex justify-center text-rose-500 mb-1">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-black text-rose-800">Nota de Crédito no encontrada</p>
+                  <p className="text-[11px] font-medium text-rose-600">No existe ninguna nota de crédito con el código ingresado. Verifique e intente de nuevo.</p>
+                </div>
+              )}
+
+              {queryCreditNoteResult && queryCreditNoteResult !== 'not_found' && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3.5 animate-fade-in">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">Código de Nota</span>
+                      <span className="text-sm font-black font-mono text-slate-900">#{queryCreditNoteResult.code}</span>
+                    </div>
+                    <div>
+                      {queryCreditNoteResult.status === 'active' && (
+                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          ACTIVA
+                        </span>
+                      )}
+                      {queryCreditNoteResult.status === 'depleted' && (
+                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-slate-200 text-slate-700 border border-slate-300">
+                          AGOTADA
+                        </span>
+                      )}
+                      {queryCreditNoteResult.status === 'voided' && (
+                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-200">
+                          ANULADA
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/60">
+                      <span className="text-[9px] font-extrabold uppercase text-slate-400 block mb-0.5">Monto Original</span>
+                      <span className="text-sm font-black font-mono text-slate-800">
+                        RD$ {queryCreditNoteResult.originalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/60">
+                      <span className="text-[9px] font-extrabold uppercase text-slate-400 block mb-0.5">Saldo Disponible</span>
+                      <span className="text-sm font-black font-mono text-indigo-600">
+                        RD$ {queryCreditNoteResult.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {(queryCreditNoteResult.createdAt || queryCreditNoteResult.employeeName) && (
+                    <div className="pt-2 text-[11px] font-semibold text-slate-500 space-y-0.5">
+                      {queryCreditNoteResult.createdAt && (
+                        <div>Emitida el: <span className="text-slate-800 font-bold">{new Date(queryCreditNoteResult.createdAt).toLocaleDateString('es-DO')}</span></div>
+                      )}
+                      {queryCreditNoteResult.employeeName && (
+                        <div>Emitida por: <span className="text-slate-800 font-bold">{queryCreditNoteResult.employeeName}</span></div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsQueryCreditNoteOpen(false);
+                  setQueryCreditNoteCode('');
+                  setQueryCreditNoteResult(null);
+                }}
+                className="px-5 py-2.5 text-xs font-black text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -169,6 +169,7 @@ export interface TicketConfig {
 export interface DashboardConfig {
   id: string;
   cardFeePercent: number; // default 3.8
+  defaultInitialCash?: number; // default 500
   holidays: string[]; // fechas YYYY-MM-DD de días feriados/no laborables
   paymentTypes?: PaymentTypeConfig[];
   bankAccounts?: BankAccount[];

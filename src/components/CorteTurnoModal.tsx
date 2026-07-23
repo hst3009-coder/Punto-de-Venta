@@ -12,7 +12,7 @@ import {
   CheckCircle,
   HelpCircle
 } from 'lucide-react';
-import { Sale, Employee, Closure, Movement, CustomerRefund } from '../types';
+import { Sale, Employee, Closure, Movement, CustomerRefund, DashboardConfig } from '../types';
 import { firestoreService } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAlert } from '../context/AlertContext';
@@ -30,6 +30,7 @@ interface CorteTurnoModalProps {
   onSuccess?: () => void;
   externalCashTotal?: number | null;
   onOpenMenudo?: () => void;
+  dashboardConfig?: DashboardConfig;
 }
 
 export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
@@ -43,14 +44,23 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
   customerRefunds = [],
   onSuccess,
   externalCashTotal = null,
-  onOpenMenudo
+  onOpenMenudo,
+  dashboardConfig,
 }) => {
   const { showAlert } = useAlert();
-  const [initialCashStr, setInitialCashStr] = useState<string>('500'); // Default starting cash
+  const configuredInitialCash = dashboardConfig?.defaultInitialCash ?? 500;
+  const [initialCashStr, setInitialCashStr] = useState<string>(String(configuredInitialCash)); // Configurable starting cash
   const [actualCashStr, setActualCashStr] = useState<string>('');
   const [isTouched, setIsTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Sync initial cash from dashboardConfig when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setInitialCashStr(String(dashboardConfig?.defaultInitialCash ?? 500));
+    }
+  }, [isOpen, dashboardConfig?.defaultInitialCash]);
 
   // Parse cash values safely
   const initialCash = parseFloat(initialCashStr) || 0;
