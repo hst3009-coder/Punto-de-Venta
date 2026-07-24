@@ -1014,12 +1014,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // --- 2. ALERT PANEL DATA ---
   const lowStockAlerts = useMemo(() => {
     return products
-      .filter(p => p.minStock !== undefined && p.minStock > 0 && p.stock <= p.minStock)
+      .filter(p => (p.minStock !== undefined && p.minStock > 0 && p.stock <= p.minStock) || p.stock <= 0)
       .map(p => ({
         id: p.id,
         name: p.name,
         stock: p.stock,
-        minStock: p.minStock!
+        minStock: p.minStock ?? 0
       }));
   }, [products]);
 

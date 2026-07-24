@@ -369,16 +369,40 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     // 1. Submit sale (App.tsx handles sale + stock + credit notes updates atomically in runBatch)
     onSubmitSale(saleData);
 
-    // 2. Print if requested
-    if (shouldPrint) {
-      window.print();
-    }
-
-    // 3. WhatsApp notification check for credit sales or mixed sales with credit component
     const hasCreditComponent =
       paymentMethod === 'credit' ||
       (paymentMethod === 'mixed' && mixedBreakdown.some(r => r.method === 'credit' && (Number(r.amount) || 0) > 0));
 
+    // 2. Print handling
+    if (shouldPrint && !hasCreditComponent) {
+      let cleanedUp = false;
+      let timerId: ReturnType<typeof setTimeout> | null = null;
+
+      const handleAfterPrint = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        if (timerId !== null) {
+          clearTimeout(timerId);
+          timerId = null;
+        }
+        window.removeEventListener('afterprint', handleAfterPrint);
+        onClose();
+      };
+
+      timerId = setTimeout(() => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        window.removeEventListener('afterprint', handleAfterPrint);
+        onClose();
+      }, 3000);
+
+      window.addEventListener('afterprint', handleAfterPrint);
+      window.print();
+    } else if (shouldPrint) {
+      window.print();
+    }
+
+    // 3. WhatsApp notification check for credit sales or mixed sales with credit component
     if (hasCreditComponent && selectedCust && selectedCust.phone && selectedCust.phone.trim()) {
       const formattedPhone = formatWhatsAppPhone(selectedCust.phone);
 
@@ -437,8 +461,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       }
     }
 
-    // 4. Close modal
-    onClose();
+    // 4. Close modal (for non-printed or credit sales)
+    if (!shouldPrint || hasCreditComponent) {
+      onClose();
+    }
   };
 
   useEffect(() => {

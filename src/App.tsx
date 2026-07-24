@@ -1034,9 +1034,9 @@ export default function App() {
   }, [cart.length]);
 
   // --- Cart Actions ---
-  const handleAddToCart = useCallback((product: Product, packaging?: ProductPackaging) => {
+  const handleAddToCart = useCallback((product: Product, packaging?: ProductPackaging, explicitBaseUnit?: boolean) => {
     // If product has packagings and no packaging was explicitly chosen, show selection modal
-    if (product.packagings && product.packagings.length > 0 && !packaging) {
+    if (product.packagings && product.packagings.length > 0 && !packaging && !explicitBaseUnit) {
       setSelectedProductForPackaging(product);
       return;
     }

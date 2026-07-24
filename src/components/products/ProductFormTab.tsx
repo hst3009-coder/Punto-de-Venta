@@ -35,6 +35,7 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
   const suggestedTargetProfit = useMemo(() => {
     return getCategoryProfitTarget(category, dashboardConfig?.categoryProfitTargets, categories);
   }, [category, dashboardConfig?.categoryProfitTargets, categories]);
+
   const [cost, setCost] = useState('');
   const [price, setPrice] = useState('');
   const [profitPercent, setProfitPercent] = useState('');
@@ -45,6 +46,36 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
   const [provider, setProvider] = useState('');
   const [expirationDate, setExpirationDate] = useState('');
   const [taxExempt, setTaxExempt] = useState(false);
+
+  const realProfitInfo = useMemo(() => {
+    const parsedCostNum = parseFloat(cost);
+    const parsedPriceNum = parseFloat(price);
+
+    if (isNaN(parsedPriceNum) || isNaN(parsedCostNum) || parsedCostNum <= 0 || parsedPriceNum < 0) {
+      return null;
+    }
+
+    const pricePreTax = getPreTaxAmount(parsedPriceNum, taxExempt);
+    const profitPerUnit = pricePreTax - parsedCostNum;
+    const marginPct = ((pricePreTax - parsedCostNum) / parsedCostNum) * 100;
+
+    let targetComparison: 'above_or_at' | 'below' | null = null;
+    if (suggestedTargetProfit !== undefined && !isNaN(suggestedTargetProfit)) {
+      if (marginPct >= suggestedTargetProfit) {
+        targetComparison = 'above_or_at';
+      } else {
+        targetComparison = 'below';
+      }
+    }
+
+    return {
+      pricePreTax,
+      profitPerUnit,
+      marginPct,
+      targetComparison,
+      suggestedTargetProfit,
+    };
+  }, [cost, price, taxExempt, suggestedTargetProfit]);
   const [packagings, setPackagings] = useState<ProductPackaging[]>([]);
   const [newPkgName, setNewPkgName] = useState('');
   const [newPkgUnits, setNewPkgUnits] = useState('');
@@ -611,6 +642,64 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
               <label htmlFor="taxExempt" className="text-[10px] font-black uppercase text-slate-500 tracking-wider cursor-pointer select-none">
                 Exento de ITBIS (18%)
               </label>
+            </div>
+
+            {/* Recuadro informativo de Ganancia Real por Unidad (Solo lectura) */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              !realProfitInfo
+                ? 'bg-slate-100/80 border-slate-200 text-slate-500'
+                : realProfitInfo.profitPerUnit < 0
+                ? 'bg-rose-50 border-rose-200 text-rose-900'
+                : realProfitInfo.targetComparison === 'below'
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : realProfitInfo.targetComparison === 'above_or_at'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                : 'bg-indigo-50 border-indigo-200 text-indigo-900'
+            }`}>
+              {realProfitInfo ? (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider block opacity-70">
+                      Ganancia Real (Informativo / Solo Lectura)
+                    </span>
+                    <div className="text-xs sm:text-sm font-black mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-slate-800">Ganancia por unidad:</span>
+                      <span className={`px-2.5 py-0.5 rounded-lg text-white font-extrabold ${
+                        realProfitInfo.profitPerUnit < 0 ? 'bg-rose-600' :
+                        realProfitInfo.targetComparison === 'below' ? 'bg-amber-600' :
+                        realProfitInfo.targetComparison === 'above_or_at' ? 'bg-emerald-600' :
+                        'bg-indigo-600'
+                      }`}>
+                        RD$ {realProfitInfo.profitPerUnit.toFixed(2)} ({realProfitInfo.marginPct.toFixed(1)}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  {realProfitInfo.suggestedTargetProfit !== undefined && (
+                    <div className="sm:text-right shrink-0">
+                      <span className="text-[10px] font-black uppercase tracking-wider block opacity-70">
+                        Objetivo Categoría: {realProfitInfo.suggestedTargetProfit}%
+                      </span>
+                      <span className={`text-[11px] font-black inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md ${
+                        realProfitInfo.targetComparison === 'above_or_at'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-amber-100 text-amber-800 border border-amber-300'
+                      }`}>
+                        {realProfitInfo.targetComparison === 'above_or_at' ? (
+                          <>✓ En objetivo (+{(realProfitInfo.marginPct - realProfitInfo.suggestedTargetProfit).toFixed(1)}%)</>
+                        ) : (
+                          <>⚠️ Por debajo (-{(realProfitInfo.suggestedTargetProfit - realProfitInfo.marginPct).toFixed(1)}%)</>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                  <span>Ganancia por unidad:</span>
+                  <span className="font-mono text-slate-400">RD$ 0.00 (0.0%)</span>
+                </div>
+              )}
             </div>
 
             {(() => {

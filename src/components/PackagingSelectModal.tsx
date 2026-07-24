@@ -6,7 +6,7 @@ interface PackagingSelectModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: Product | null;
-  onSelectPackaging: (product: Product, packaging?: ProductPackaging) => void;
+  onSelectPackaging: (product: Product, packaging?: ProductPackaging, explicitBaseUnit?: boolean) => void;
 }
 
 export const PackagingSelectModal: React.FC<PackagingSelectModalProps> = ({
@@ -51,7 +51,7 @@ export const PackagingSelectModal: React.FC<PackagingSelectModalProps> = ({
           {/* Base Unit Option */}
           <button
             onClick={() => {
-              onSelectPackaging(product, undefined);
+              onSelectPackaging(product, undefined, true);
               onClose();
             }}
             className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-indigo-500 rounded-2xl transition-all cursor-pointer group text-left shadow-2xs"

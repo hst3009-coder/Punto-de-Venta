@@ -7,6 +7,52 @@ export function normalizeString(str: string): string {
     .toLowerCase();
 }
 
+export function levenshteinDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return dp[m][n];
+}
+
+export function isFuzzyNameMatch(productName: string, searchQuery: string): boolean {
+  const normQuery = normalizeString(searchQuery.trim());
+  const queryTokens = normQuery.split(/\s+/).filter(Boolean);
+  if (queryTokens.length === 0) return false;
+
+  const normName = normalizeString(productName || '');
+  const productWords = normName.split(/\s+/).filter(Boolean);
+  if (productWords.length === 0) return false;
+
+  return queryTokens.every((qToken) => {
+    if (normName.includes(qToken)) return true;
+
+    const maxAllowedDist = qToken.length <= 4 ? 1 : 2;
+    return productWords.some((pWord) => {
+      if (Math.abs(qToken.length - pWord.length) > maxAllowedDist) return false;
+      const dist = levenshteinDistance(qToken, pWord);
+      return dist <= maxAllowedDist;
+    });
+  });
+}
+
 export function compareProductsNatural(a: Product, b: Product, recentSalesCount?: Map<string, number>): number {
   const nameA = a.name || '';
   const nameB = b.name || '';
@@ -49,6 +95,7 @@ export function rankSearchResults(
   if (isNumericQuery) {
     const startsWithCode: Product[] = [];
     const containsCode: Product[] = [];
+    const fuzzyName: Product[] = [];
     const others: Product[] = [];
 
     products.forEach(p => {
@@ -66,6 +113,8 @@ export function rankSearchResults(
         startsWithCode.push(p);
       } else if (codes.some(c => c.includes(cleanQuery))) {
         containsCode.push(p);
+      } else if (isFuzzyNameMatch(p.name || '', queryClean)) {
+        fuzzyName.push(p);
       } else {
         others.push(p);
       }
@@ -74,6 +123,7 @@ export function rankSearchResults(
     return [
       ...startsWithCode.sort((a, b) => compareProductsNatural(a, b, recentSalesCount)),
       ...containsCode.sort((a, b) => compareProductsNatural(a, b, recentSalesCount)),
+      ...fuzzyName.sort((a, b) => compareProductsNatural(a, b, recentSalesCount)),
       ...others.sort((a, b) => compareProductsNatural(a, b, recentSalesCount))
     ];
   }
@@ -82,6 +132,7 @@ export function rankSearchResults(
   const normQuery = normalizeString(queryClean);
   const startsWithName: Product[] = [];
   const containsName: Product[] = [];
+  const fuzzyName: Product[] = [];
   const others: Product[] = [];
 
   products.forEach(p => {
@@ -90,6 +141,8 @@ export function rankSearchResults(
       startsWithName.push(p);
     } else if (normName.includes(normQuery)) {
       containsName.push(p);
+    } else if (isFuzzyNameMatch(p.name || '', queryClean)) {
+      fuzzyName.push(p);
     } else {
       others.push(p);
     }
@@ -98,6 +151,7 @@ export function rankSearchResults(
   return [
     ...startsWithName.sort((a, b) => compareProductsNatural(a, b, recentSalesCount)),
     ...containsName.sort((a, b) => compareProductsNatural(a, b, recentSalesCount)),
+    ...fuzzyName.sort((a, b) => compareProductsNatural(a, b, recentSalesCount)),
     ...others.sort((a, b) => compareProductsNatural(a, b, recentSalesCount))
   ];
 }
@@ -138,5 +192,10 @@ export function matchesProductSearch(
   const normalizedSku = normalizeString(product.sku || '');
   const combinedText = `${normalizedName} ${normalizedCategory} ${normalizedCode} ${normalizedSku}`;
 
-  return tokens.every((token) => combinedText.includes(token));
+  if (tokens.every((token) => combinedText.includes(token))) {
+    return true;
+  }
+
+  // 3. Fuzzy match (Levenshtein) on product name if exact/substring match failed
+  return isFuzzyNameMatch(product.name || '', queryClean);
 }
