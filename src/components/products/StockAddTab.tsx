@@ -89,9 +89,9 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
 
   const handleSelectProduct = (prod: Product) => {
     setSelectedProduct(prod);
-    setCost(prod.cost !== undefined ? prod.cost.toString() : '');
-    setPrice(prod.price !== undefined ? prod.price.toString() : '');
-    setProfitPercent(prod.profitPercent !== undefined ? prod.profitPercent.toString() : '');
+    setCost(prod.cost != null ? prod.cost.toString() : '');
+    setPrice(prod.price != null ? prod.price.toString() : '');
+    setProfitPercent(prod.profitPercent != null ? prod.profitPercent.toString() : '');
     setAddQuantity('');
     setExpirationDate(prod.expirationDate || '');
     setSearchQuery(''); // clear search query after select
@@ -561,7 +561,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                         const origPkg = selectedProduct.packagings?.find((p) => p.id === pkg.id) || pkg;
                         const suggested = computeSuggestedPackagingPrice(origPkg, oldUnitPrice, newUnitPrice);
                         const currentInputValue =
-                          pkgEdits[pkg.id] !== undefined ? pkgEdits[pkg.id] : suggested.toString();
+                          pkgEdits[pkg.id] ?? (suggested !== undefined && !isNaN(suggested) ? suggested.toString() : '');
                         const isApplied = appliedPkgIds.has(pkg.id);
 
                         return (

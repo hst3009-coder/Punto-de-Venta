@@ -1019,7 +1019,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                     <span className="text-[8px] font-bold text-indigo-600">SKU:</span>
                                     <input
                                       type="text"
-                                      value={activeEdit.value}
+                                      value={activeEdit.value || ''}
                                       onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
@@ -1055,7 +1055,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                     <span className="text-[9px] text-slate-400 font-mono font-bold">#</span>
                                     <input
                                       type="text"
-                                      value={activeEdit.value}
+                                      value={activeEdit.value || ''}
                                       onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
@@ -1094,7 +1094,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                               <input
                                 type="text"
                                 list={`category-list-${prod.id}`}
-                                value={activeEdit.value}
+                                value={activeEdit.value || ''}
                                 onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
@@ -1197,7 +1197,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={activeEdit.value}
+                                value={activeEdit.value || ''}
                                 onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }
@@ -1234,7 +1234,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={activeEdit.value}
+                                value={activeEdit.value || ''}
                                 onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') { e.preventDefault(); saveCurrentEdit(); }

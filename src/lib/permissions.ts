@@ -81,7 +81,8 @@ export function getEmployeePermissions(employee: Employee | null): EmployeePermi
   }
 
   if (employee.permissions) {
-    return employee.permissions;
+    const roleDefaults = ROLE_DEFAULT_PERMISSIONS[employee.role] || ROLE_DEFAULT_PERMISSIONS.cashier;
+    return { ...roleDefaults, ...employee.permissions };
   }
 
   return ROLE_DEFAULT_PERMISSIONS[employee.role] || ROLE_DEFAULT_PERMISSIONS.cashier;

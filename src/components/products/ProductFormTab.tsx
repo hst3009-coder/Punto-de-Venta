@@ -64,11 +64,11 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
         setBarcode(prod.barcode || '');
         setCode(prod.code || '');
         setSku(prod.sku || '');
-        setCost(prod.cost !== undefined ? prod.cost.toString() : '');
-        setPrice(prod.price !== undefined ? prod.price.toString() : '');
-        setProfitPercent(prod.profitPercent !== undefined ? prod.profitPercent.toString() : '');
+        setCost(prod.cost != null ? prod.cost.toString() : '');
+        setPrice(prod.price != null ? prod.price.toString() : '');
+        setProfitPercent(prod.profitPercent != null ? prod.profitPercent.toString() : '');
         setCategory(prod.category || '');
-        setStock(prod.stock !== undefined ? prod.stock.toString() : '0');
+        setStock(prod.stock != null ? prod.stock.toString() : '0');
         setEmoji(prod.emoji || '📦');
         setImageUrl(prod.imageUrl || '');
         setImageType(prod.imageUrl ? 'url' : 'emoji');

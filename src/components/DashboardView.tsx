@@ -33,7 +33,9 @@ import {
   Landmark,
   FileBarChart,
   Ban,
-  Search
+  Search,
+  Printer,
+  RotateCcw
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -124,7 +126,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const [activeTab, setActiveTab] = useState<DashboardTab>('resumen');
-  const [expandedClosureId, setExpandedClosureId] = useState<string | null>(null);
+  const [selectedClosureModal, setSelectedClosureModal] = useState<Closure | null>(null);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
   const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
   const [confirmingDeposit, setConfirmingDeposit] = useState<CardDeposit | null>(null);
@@ -1335,6 +1337,128 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
   }, [closures, sales, start, end]);
 
+  // Chronological closures array for modal time window calculations
+  const allSortedClosures = useMemo(() => {
+    return [...closures].sort((a, b) => 
+      new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime()
+    );
+  }, [closures]);
+
+  // --- Selected Closure Detail Modal Calculations ---
+  const modalSales = useMemo(() => {
+    if (!selectedClosureModal) return [];
+    const idx = allSortedClosures.findIndex(c => c.id === selectedClosureModal.id);
+    const prevClosure = idx > 0 ? allSortedClosures[idx - 1] : null;
+    const windowStart = prevClosure ? new Date(prevClosure.createdAt || prevClosure.date) : new Date(0);
+    const windowEnd = new Date(selectedClosureModal.createdAt || selectedClosureModal.date);
+
+    return sales.filter(s => {
+      if (s.isCancelled) return false;
+      const sTime = getSaleTimestamp(s);
+      return sTime > windowStart.getTime() && sTime <= windowEnd.getTime();
+    });
+  }, [selectedClosureModal, allSortedClosures, sales]);
+
+  const modalSalesMetrics = useMemo(() => {
+    let total = 0;
+    let cash = 0;
+    let card = 0;
+    let transfer = 0;
+    let credit = 0;
+    let mixed = 0;
+
+    modalSales.forEach(sale => {
+      total += sale.total;
+      if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown && sale.paymentBreakdown.length > 0) {
+        mixed += sale.total;
+        sale.paymentBreakdown.forEach(b => {
+          if (b.method === 'cash') cash += b.amount;
+          else if (b.method === 'card') card += b.amount;
+          else if (b.method === 'transfer') transfer += b.amount;
+          else if (b.method === 'credit') credit += b.amount;
+        });
+      } else if (sale.paymentMethod === 'cash') {
+        cash += sale.total;
+      } else if (sale.paymentMethod === 'card') {
+        card += sale.total;
+      } else if (sale.paymentMethod === 'transfer') {
+        transfer += sale.total;
+      } else if (sale.paymentMethod === 'credit' || sale.isCredit) {
+        credit += sale.total;
+      }
+    });
+
+    return { total, cash, card, transfer, credit, mixed, count: modalSales.length };
+  }, [modalSales]);
+
+  const modalCreditSales = useMemo(() => {
+    if (!selectedClosureModal) return [];
+    return modalSales
+      .map(sale => {
+        let creditAmount = 0;
+        if (sale.paymentMethod === 'credit' || sale.isCredit) {
+          creditAmount = sale.total;
+        } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+          creditAmount = sale.paymentBreakdown
+            .filter(b => b.method === 'credit')
+            .reduce((sum, b) => sum + b.amount, 0);
+        }
+
+        if (creditAmount <= 0) return null;
+
+        const dateVal = sale.createdAt || sale.date;
+        const timeStr = dateVal 
+          ? new Date(dateVal).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) 
+          : '--:--';
+        const cust = customers.find(c => c.id === sale.customerId);
+        const customerName = sale.customerName || cust?.name || 'Cliente sin nombre';
+
+        return {
+          id: sale.id,
+          ticketNumber: sale.ticketNumber,
+          customerName,
+          amount: creditAmount,
+          timeStr,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [selectedClosureModal, modalSales, customers]);
+
+  const modalMovements = useMemo(() => {
+    if (!selectedClosureModal) return [];
+    const idx = allSortedClosures.findIndex(c => c.id === selectedClosureModal.id);
+    const prevClosure = idx > 0 ? allSortedClosures[idx - 1] : null;
+    const windowStart = prevClosure ? new Date(prevClosure.createdAt || prevClosure.date) : new Date(0);
+    const windowEnd = new Date(selectedClosureModal.createdAt || selectedClosureModal.date);
+
+    return movements.filter(m => {
+      if (m.type !== 'out') return false;
+      const source = m.source ?? 'shift';
+      if (source !== 'shift') return false;
+      if (selectedClosureModal.employeeId && m.employeeId && m.employeeId !== selectedClosureModal.employeeId) return false;
+      const mTime = new Date(m.createdAt || m.date).getTime();
+      return mTime > windowStart.getTime() && mTime <= windowEnd.getTime();
+    });
+  }, [selectedClosureModal, allSortedClosures, movements]);
+
+  const modalExpensesTotal = useMemo(() => {
+    return modalMovements.reduce((sum, m) => sum + m.amount, 0);
+  }, [modalMovements]);
+
+  const modalRefunds = useMemo(() => {
+    if (!selectedClosureModal) return [];
+    const idx = allSortedClosures.findIndex(c => c.id === selectedClosureModal.id);
+    const prevClosure = idx > 0 ? allSortedClosures[idx - 1] : null;
+    const windowStart = prevClosure ? new Date(prevClosure.createdAt || prevClosure.date) : new Date(0);
+    const windowEnd = new Date(selectedClosureModal.createdAt || selectedClosureModal.date);
+
+    return customerRefunds.filter(r => {
+      const rTime = new Date(r.createdAt || r.date).getTime();
+      if (selectedClosureModal.employeeId && r.employeeId && r.employeeId !== selectedClosureModal.employeeId) return false;
+      return rTime > windowStart.getTime() && rTime <= windowEnd.getTime();
+    });
+  }, [selectedClosureModal, allSortedClosures, customerRefunds]);
+
   // --- 7. EMPLOYEES STATS ---
   const employeeStats = useMemo(() => {
     const stats: Record<string, { 
@@ -2272,16 +2396,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ) : (
                 <div className="space-y-3">
                   {closuresWithSales.map(closure => {
-                    const isExpanded = expandedClosureId === closure.id;
                     return (
-                      <div key={closure.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden transition-all">
+                      <div key={closure.id} className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden transition-all hover:border-indigo-200 hover:shadow-md">
                         <button 
-                          onClick={() => setExpandedClosureId(isExpanded ? null : closure.id)}
-                          className="w-full p-4 flex flex-wrap items-center justify-between gap-4 hover:bg-slate-50 transition-colors text-left"
+                          onClick={() => setSelectedClosureModal(closure)}
+                          className="w-full p-4 flex flex-wrap items-center justify-between gap-4 transition-colors text-left cursor-pointer"
                         >
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
-                              <Receipt className="w-5 h-5 text-slate-500" />
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                              <Receipt className="w-5 h-5" />
                             </div>
                             <div>
                               <span className="text-xs font-black text-slate-800 block">
@@ -2294,50 +2417,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <div className="flex flex-wrap items-center gap-6">
                             <div className="text-right">
                               <span className="text-[9px] font-black text-slate-400 uppercase block">Ventas Total</span>
-                              <span className="text-sm font-black font-mono text-slate-800">RD$ {closure.actualTotal.toLocaleString()}</span>
+                              <span className="text-sm font-black font-mono text-slate-800">RD$ {closure.actualTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="text-right">
                               <span className="text-[9px] font-black text-slate-400 uppercase block">Diferencia</span>
                               <span className={`text-sm font-black font-mono ${closure.difference < 0 ? 'text-rose-600' : closure.difference > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
-                                RD$ {closure.difference.toLocaleString()}
+                                RD$ {closure.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                               </span>
                             </div>
-                            <div className="p-2 text-slate-400">
-                              {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                            <div className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs transition-colors">
+                              Ver Detalle
                             </div>
                           </div>
                         </button>
-
-                        {isExpanded && (
-                          <div className="px-4 pb-4 border-t border-slate-100 animate-slide-down">
-                            <div className="mt-4 overflow-x-auto">
-                              <table className="w-full text-left text-[11px]">
-                                <thead>
-                                  <tr className="border-b border-slate-100">
-                                    <th className="py-2 font-black text-slate-400 uppercase tracking-widest">Ticket</th>
-                                    <th className="py-2 font-black text-slate-400 uppercase tracking-widest">Hora</th>
-                                    <th className="py-2 font-black text-slate-400 uppercase tracking-widest">Método</th>
-                                    <th className="py-2 font-black text-slate-400 uppercase tracking-widest text-right">Monto</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                  {closure.sales.map(sale => (
-                                    <tr key={sale.id}>
-                                      <td className="py-2 font-bold text-slate-700">{sale.ticketNumber}</td>
-                                      <td className="py-2 text-slate-500">{new Date(getSaleTimestamp(sale)).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</td>
-                                      <td className="py-2">
-                                        <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold uppercase text-[9px]">
-                                          {sale.paymentMethod}
-                                        </span>
-                                      </td>
-                                      <td className="py-2 font-mono font-bold text-right">RD$ {sale.total.toFixed(2)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -4015,6 +4107,357 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- SHIFT CLOSURE DETAIL MODAL --- */}
+      {selectedClosureModal && (
+        <div 
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedClosureModal(null); }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:static"
+        >
+          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] print:border-none print:shadow-none print:max-h-full print:w-full animate-scale-up">
+            
+            {/* Header (Screen) */}
+            <div className="p-6 border-b border-slate-150 flex justify-between items-center bg-slate-50/80 shrink-0 print:hidden">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-slate-800">Detalle del Corte de Turno</h2>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {selectedClosureModal.clerkName} • {formatSpanishDate(new Date(selectedClosureModal.createdAt || selectedClosureModal.date))}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClosureModal(null)}
+                  className="p-2 rounded-xl hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Print Header */}
+            <div className="hidden print:block text-center border-b border-dashed pb-4 mb-4 p-6">
+              <h1 className="text-xl font-bold uppercase tracking-wider">Reporte de Corte de Turno</h1>
+              <p className="text-xs font-mono mt-1">
+                Cajero: {selectedClosureModal.clerkName} • Fecha: {new Date(selectedClosureModal.createdAt || selectedClosureModal.date).toLocaleString('es-DO')}
+              </p>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              
+              {/* 1. ENCABEZADO DEL CORTE */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Información General</span>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-bold text-slate-700">
+                    <span>Cajero: <strong className="text-slate-900">{selectedClosureModal.clerkName}</strong></span>
+                    <span>Fecha: <strong className="text-slate-900">{formatSpanishDate(new Date(selectedClosureModal.createdAt || selectedClosureModal.date))}</strong></span>
+                    <span>Hora Cierre: <strong className="text-slate-900">{new Date(selectedClosureModal.createdAt || selectedClosureModal.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                  </div>
+                </div>
+                
+                {(selectedClosureModal.pendingCashCount || selectedClosureModal.closedByAdminName) && (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>
+                      Cerrado por admin ({selectedClosureModal.closedByAdminName || 'Administrador'})
+                      {selectedClosureModal.pendingCashCount && ' — Conteo pendiente'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. RESUMEN DE CAJA */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Landmark className="w-4 h-4 text-indigo-500" />
+                  <span>Resumen de Caja</span>
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Fondo Inicial</span>
+                    <span className="text-sm font-black font-mono text-slate-800">
+                      RD$ {selectedClosureModal.initialCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Ventas en Efectivo</span>
+                    <span className="text-sm font-black font-mono text-emerald-600">
+                      + RD$ {modalSalesMetrics.cash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Egresos del Turno</span>
+                    <span className="text-sm font-black font-mono text-rose-600">
+                      - RD$ {modalExpensesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Efectivo Esperado</span>
+                    <span className="text-sm font-black font-mono text-slate-800">
+                      RD$ {selectedClosureModal.expectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Efectivo Contado</span>
+                    <span className="text-sm font-black font-mono text-slate-800">
+                      RD$ {selectedClosureModal.actualCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      {selectedClosureModal.pendingCashCount && <span className="text-[9px] text-amber-600 ml-1 font-sans">(Pendiente)</span>}
+                    </span>
+                  </div>
+                  <div className={`p-3 border rounded-2xl ${
+                    selectedClosureModal.difference < 0 ? 'bg-rose-50 border-rose-200 text-rose-800' :
+                    selectedClosureModal.difference > 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                    'bg-slate-50 border-slate-200 text-slate-800'
+                  }`}>
+                    <span className="text-[9px] font-black uppercase opacity-70 block">Diferencia</span>
+                    <span className="text-sm font-black font-mono">
+                      RD$ {selectedClosureModal.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. VENTAS DEL TURNO */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShoppingBag className="w-4 h-4 text-emerald-500" />
+                    <span>Ventas del Turno ({modalSalesMetrics.count})</span>
+                  </h3>
+                  <span className="text-xs font-black font-mono text-slate-800">
+                    Total: RD$ {modalSalesMetrics.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {/* Desglose por método de pago */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Efectivo</span>
+                    <span className="text-xs font-extrabold font-mono text-slate-700">RD$ {modalSalesMetrics.cash.toFixed(2)}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Tarjeta</span>
+                    <span className="text-xs font-extrabold font-mono text-slate-700">RD$ {modalSalesMetrics.card.toFixed(2)}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Transferencia</span>
+                    <span className="text-xs font-extrabold font-mono text-slate-700">RD$ {modalSalesMetrics.transfer.toFixed(2)}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Crédito</span>
+                    <span className="text-xs font-extrabold font-mono text-slate-700">RD$ {modalSalesMetrics.credit.toFixed(2)}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl col-span-2 sm:col-span-1">
+                    <span className="text-[9px] font-black uppercase text-slate-400 block">Mixto (Total)</span>
+                    <span className="text-xs font-extrabold font-mono text-slate-700">RD$ {modalSalesMetrics.mixed.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Tabla de ventas individuales */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto">
+                  {modalSales.length === 0 ? (
+                    <p className="p-4 text-center text-xs font-medium text-slate-400">No se registraron ventas en este turno.</p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Ticket</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Hora</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Método</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px] text-right">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {modalSales.map(sale => (
+                          <tr key={sale.id} className="hover:bg-slate-50/50">
+                            <td className="py-2 px-3 font-bold text-slate-800">{sale.ticketNumber}</td>
+                            <td className="py-2 px-3 text-slate-500 font-medium">
+                              {new Date(getSaleTimestamp(sale)).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold uppercase text-[9px]">
+                                {sale.paymentMethod}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 font-mono font-bold text-right text-slate-800">
+                              RD$ {sale.total.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. VENTAS A CRÉDITO DE ESE TURNO */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <CreditCard className="w-4 h-4 text-amber-500" />
+                  <span>Ventas a Crédito del Turno ({modalCreditSales.length})</span>
+                </h3>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-44 overflow-y-auto">
+                  {modalCreditSales.length === 0 ? (
+                    <p className="p-4 text-center text-xs font-medium text-slate-400">No hubo ventas a crédito en este turno.</p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Cliente</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Ticket</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Hora</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px] text-right">Monto Crédito</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {modalCreditSales.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50/50">
+                            <td className="py-2 px-3 font-bold text-slate-800">{item.customerName}</td>
+                            <td className="py-2 px-3 text-slate-600 font-medium">{item.ticketNumber}</td>
+                            <td className="py-2 px-3 text-slate-500 font-medium">{item.timeStr}</td>
+                            <td className="py-2 px-3 font-mono font-bold text-right text-amber-700">
+                              RD$ {item.amount.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* 5. EGRESOS DETALLADOS DE ESE TURNO */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <TrendingDown className="w-4 h-4 text-rose-500" />
+                  <span>Egresos Detallados del Turno ({modalMovements.length})</span>
+                </h3>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-44 overflow-y-auto">
+                  {modalMovements.length === 0 ? (
+                    <p className="p-4 text-center text-xs font-medium text-slate-400">No hubo egresos registrados en este turno.</p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Concepto</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Categoría</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Hora</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px] text-right">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {modalMovements.map(m => (
+                          <tr key={m.id} className="hover:bg-slate-50/50">
+                            <td className="py-2 px-3 font-bold text-slate-800">
+                              {m.concept}
+                              {m.expenseType === 'pago_factura' && m.invoiceNumber && (
+                                <span className="text-indigo-600 font-bold normal-case ml-1">
+                                  — Factura #{m.invoiceNumber}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-slate-500 font-medium">{m.category}</td>
+                            <td className="py-2 px-3 text-slate-500 font-medium">
+                              {new Date(m.createdAt || m.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="py-2 px-3 font-mono font-bold text-right text-rose-600">
+                              RD$ {m.amount.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* 6. DEVOLUCIONES DETALLADAS DE ESE TURNO */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <RotateCcw className="w-4 h-4 text-purple-500" />
+                  <span>Devoluciones Detalladas del Turno ({modalRefunds.length})</span>
+                </h3>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-44 overflow-y-auto">
+                  {modalRefunds.length === 0 ? (
+                    <p className="p-4 text-center text-xs font-medium text-slate-400">No hubo devoluciones en este turno.</p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Ticket Orig.</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Cliente</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Método</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px]">Motivo</th>
+                          <th className="py-2 px-3 font-black text-slate-400 uppercase tracking-wider text-[10px] text-right">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {modalRefunds.map(r => {
+                          const cust = customers.find(c => c.id === r.customerId);
+                          const customerName = cust?.name || r.customerName || 'Cliente';
+                          const methodLabel = r.method === 'cash' ? 'Efectivo' : r.method === 'credit_note' ? 'Nota de Crédito' : 'Reducción de Crédito';
+                          return (
+                            <tr key={r.id} className="hover:bg-slate-50/50">
+                              <td className="py-2 px-3 font-bold text-slate-800">{r.ticketNumber}</td>
+                              <td className="py-2 px-3 text-slate-700 font-medium">{customerName}</td>
+                              <td className="py-2 px-3">
+                                <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-bold uppercase text-[9px]">
+                                  {methodLabel}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-slate-500 font-medium truncate max-w-xs">{r.reason}</td>
+                              <td className="py-2 px-3 font-mono font-bold text-right text-purple-700">
+                                RD$ {r.amount.toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-4 border-t border-slate-150 bg-slate-50/80 flex items-center justify-between shrink-0 print:hidden">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Imprimir Reporte</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedClosureModal(null)}
+                className="px-4 py-2 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+
           </div>
         </div>
       )}

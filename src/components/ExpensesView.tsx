@@ -73,6 +73,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [bankAccountId, setBankAccountId] = useState<string>('');
   const [expenseType, setExpenseType] = useState<'gasto' | 'pago_factura'>('gasto');
+  const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [isOperational, setIsOperational] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -145,10 +146,11 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         if (searchTerm.trim()) {
           const term = searchTerm.toLowerCase();
           const conceptMatch = m.concept?.toLowerCase().includes(term);
+          const invoiceMatch = m.invoiceNumber?.toLowerCase().includes(term);
           const catMatch = m.category?.toLowerCase().includes(term);
           const clerkMatch = m.clerkName?.toLowerCase().includes(term) || m.employeeName?.toLowerCase().includes(term);
           const amountMatch = m.amount.toString().includes(term);
-          if (!conceptMatch && !catMatch && !clerkMatch && !amountMatch) return false;
+          if (!conceptMatch && !invoiceMatch && !catMatch && !clerkMatch && !amountMatch) return false;
         }
 
         return true;
@@ -234,6 +236,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         date: new Date().toLocaleString('es-ES', { hour12: false }),
         createdAt: new Date().toISOString(),
         expenseType,
+        invoiceNumber: expenseType === 'pago_factura' && invoiceNumber.trim() ? invoiceNumber.trim() : undefined,
         isOperational: expenseType === 'pago_factura' ? true : isOperational,
         source: 'dashboard' as const
       };
@@ -249,6 +252,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       setPaymentMethod('cash');
       setBankAccountId('');
       setExpenseType('gasto');
+      setInvoiceNumber('');
       setIsOperational(true);
       setIsModalOpen(false);
     } catch (err) {
@@ -541,7 +545,14 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
                       {/* Concept & Category */}
                       <td className="py-3 px-4">
-                        <div className="font-bold text-slate-800 max-w-xs truncate">{m.concept}</div>
+                        <div className="font-bold text-slate-800 max-w-xs truncate">
+                          {m.concept}
+                          {m.expenseType === 'pago_factura' && m.invoiceNumber && (
+                            <span className="text-indigo-600 font-bold normal-case ml-1">
+                              — Factura #{m.invoiceNumber}
+                            </span>
+                          )}
+                        </div>
                         <div className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md mt-0.5">
                           <Tag className="w-2.5 h-2.5 text-slate-400" />
                           <span>{m.category}</span>
@@ -852,6 +863,21 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                     </select>
                   </div>
                 </div>
+
+                {expenseType === 'pago_factura' && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">
+                      # Factura (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej. 1234, FACT-0092..."
+                      value={invoiceNumber}
+                      onChange={e => setInvoiceNumber(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-xs text-slate-800 focus:bg-white focus:border-rose-500 focus:outline-hidden"
+                    />
+                  </motion.div>
+                )}
 
                 {/* Actions */}
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">

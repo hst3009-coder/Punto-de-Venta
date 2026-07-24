@@ -2449,6 +2449,7 @@ export default function App() {
             currentEmployee={currentEmployee}
             clerkName={clerkName}
             forcePaymentMethod={expensesForceCash ? 'cash' : undefined}
+            closures={closures}
           />
         </React.Suspense>
       )}

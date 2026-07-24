@@ -404,7 +404,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
                           <input
                             type="number"
                             min="1"
-                            value={comp.quantity}
+                            value={comp.quantity ?? ''}
                             onChange={(e) => handleQtyChange(comp.productId, e.target.value)}
                             className="w-12 text-center py-1 border border-slate-250 rounded-lg text-xs font-black focus:ring-1 focus:ring-indigo-500"
                           />

@@ -417,7 +417,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                     </div>
                     <input
                       type="text"
-                      value={identity.name}
+                      value={identity.name || ''}
                       onChange={(e) => onUpdateIdentity({ ...identity, name: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
                     />
@@ -430,7 +430,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                       <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={identity.showSloganOnInvoice}
+                          checked={!!identity.showSloganOnInvoice}
                           onChange={(e) => onUpdateIdentity({ ...identity, showSloganOnInvoice: e.target.checked })}
                           className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 border-slate-300"
                         />
@@ -439,7 +439,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                     </div>
                     <input
                       type="text"
-                      value={identity.slogan}
+                      value={identity.slogan || ''}
                       onChange={(e) => onUpdateIdentity({ ...identity, slogan: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
                     />
@@ -452,7 +452,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                       <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={identity.showAddressOnInvoice}
+                          checked={!!identity.showAddressOnInvoice}
                           onChange={(e) => onUpdateIdentity({ ...identity, showAddressOnInvoice: e.target.checked })}
                           className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 border-slate-300"
                         />
@@ -461,7 +461,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                     </div>
                     <input
                       type="text"
-                      value={identity.address}
+                      value={identity.address || ''}
                       onChange={(e) => onUpdateIdentity({ ...identity, address: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
                     />
@@ -474,7 +474,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                       <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={identity.showPhoneOnInvoice}
+                          checked={!!identity.showPhoneOnInvoice}
                           onChange={(e) => onUpdateIdentity({ ...identity, showPhoneOnInvoice: e.target.checked })}
                           className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 border-slate-300"
                         />
@@ -483,7 +483,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                     </div>
                     <input
                       type="text"
-                      value={identity.phone}
+                      value={identity.phone || ''}
                       onChange={(e) => onUpdateIdentity({ ...identity, phone: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
                     />
@@ -496,7 +496,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                       <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={identity.showLogoOnInvoice}
+                          checked={!!identity.showLogoOnInvoice}
                           onChange={(e) => onUpdateIdentity({ ...identity, showLogoOnInvoice: e.target.checked })}
                           className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 border-slate-300"
                         />
@@ -514,7 +514,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                       <div className="flex-1 space-y-1.5">
                         <input
                           type="text"
-                          value={identity.logoUrl}
+                          value={identity.logoUrl || ''}
                           placeholder="Ej: ☕ o enlace de imagen"
                           onChange={(e) => onUpdateIdentity({ ...identity, logoUrl: e.target.value })}
                           className="w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
@@ -1268,7 +1268,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                       <label className="text-[11px] font-bold text-slate-600 block">Mensaje de Pie de Ticket</label>
                       <input
                         type="text"
-                        value={ticketConfig.footerMessageText}
+                        value={ticketConfig.footerMessageText || ''}
                         onChange={(e) => onUpdateDashboardConfig({
                           ...dashboardConfig,
                           ticketConfig: { ...ticketConfig, footerMessageText: e.target.value }

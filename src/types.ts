@@ -321,6 +321,7 @@ export interface Movement {
   date: string;
   createdAt?: string;
   expenseType?: 'gasto' | 'pago_factura';
+  invoiceNumber?: string;
   isOperational?: boolean;
   source?: 'shift' | 'dashboard';
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   DollarSign, 
@@ -9,9 +9,10 @@ import {
   Plus, 
   History,
   TrendingDown,
-  AlertCircle
+  AlertCircle,
+  Hash
 } from 'lucide-react';
-import { Movement, Employee } from '../types';
+import { Movement, Employee, Closure } from '../types';
 import { firestoreService } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAlert } from '../context/AlertContext';
@@ -23,6 +24,7 @@ interface ExpensesModalProps {
   currentEmployee: Employee | null;
   clerkName: string;
   forcePaymentMethod?: 'cash' | 'card' | 'transfer';
+  closures?: Closure[];
 }
 
 const CATEGORY_SUGGESTIONS = [
@@ -38,7 +40,8 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
   onClose,
   movements,
   currentEmployee,
-  clerkName
+  clerkName,
+  closures = []
 }) => {
   const { showAlert } = useAlert();
   const [amount, setAmount] = useState<string>('');
@@ -48,6 +51,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
   const paymentMethod = 'cash' as const;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expenseType, setExpenseType] = useState<'gasto' | 'pago_factura'>('gasto');
+  const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [isOperational, setIsOperational] = useState(true);
 
   React.useEffect(() => {
@@ -57,6 +61,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
       setCategory('Servicios');
       setCustomCategory('');
       setExpenseType('gasto');
+      setInvoiceNumber('');
       setIsOperational(true);
     }
   }, [isOpen]);
@@ -96,6 +101,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
         date: new Date().toLocaleString('es-ES', { hour12: false }),
         createdAt: new Date().toISOString(),
         expenseType,
+        invoiceNumber: expenseType === 'pago_factura' && invoiceNumber.trim() ? invoiceNumber.trim() : undefined,
         isOperational: expenseType === 'pago_factura' ? true : isOperational,
         source: 'shift' as const
       };
@@ -109,6 +115,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
       setCategory('Servicios');
       setCustomCategory('');
       setExpenseType('gasto');
+      setInvoiceNumber('');
       setIsOperational(true);
     } catch (error) {
       console.error('Error saving movement:', error);
@@ -118,9 +125,48 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
     }
   };
 
-  const recentExpenses = movements
-    .filter(m => m.type === 'out')
-    .slice(0, 20);
+  const recentExpenses = useMemo(() => {
+    if (currentEmployee) {
+      const empClosures = closures.filter(c => c.employeeId === currentEmployee.id);
+      let lastClosure: Closure | null = null;
+      empClosures.forEach(current => {
+        if (!lastClosure) {
+          lastClosure = current;
+          return;
+        }
+        const latestTime = new Date(lastClosure.createdAt || lastClosure.date).getTime();
+        const currentTime = new Date(current.createdAt || current.date).getTime();
+        if (currentTime > latestTime) {
+          lastClosure = current;
+        }
+      });
+
+      const lastClosureTime = lastClosure 
+        ? new Date(lastClosure.createdAt || lastClosure.date).getTime() 
+        : 0;
+
+      return movements.filter(m => {
+        if (m.type !== 'out') return false;
+        const source = m.source ?? 'shift';
+        if (source !== 'shift') return false;
+        if (m.employeeId !== currentEmployee.id) return false;
+        const mTime = new Date(m.createdAt || m.date).getTime();
+        return mTime > lastClosureTime;
+      });
+    } else {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const startOfTodayTime = startOfToday.getTime();
+
+      return movements.filter(m => {
+        if (m.type !== 'out') return false;
+        const source = m.source ?? 'shift';
+        if (source !== 'shift') return false;
+        const mTime = new Date(m.createdAt || m.date).getTime();
+        return mTime >= startOfTodayTime;
+      });
+    }
+  }, [movements, currentEmployee, closures]);
 
   if (!isOpen) return null;
 
@@ -240,6 +286,22 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                   </div>
                 </div>
 
+                {/* Número de factura (opcional cuando expenseType es 'pago_factura') */}
+                {expenseType === 'pago_factura' && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-1">
+                    <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+                      <Hash className="w-3.5 h-3.5" /> # Factura (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej. 1234, FACT-0092..."
+                      value={invoiceNumber}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-4 text-xs font-medium focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-hidden transition-all placeholder:text-slate-400"
+                    />
+                  </motion.div>
+                )}
+
                 {/* Is Operational Checkbox (only if expenseType is 'gasto') */}
                 {expenseType === 'gasto' && (
                   <div className="flex items-center gap-2 py-1">
@@ -346,6 +408,11 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                           </div>
                           <p className="text-sm font-extrabold text-slate-800 truncate uppercase" title={expense.concept}>
                             {expense.concept}
+                            {expense.expenseType === 'pago_factura' && expense.invoiceNumber && (
+                              <span className="text-indigo-600 font-bold normal-case ml-1">
+                                — Factura #{expense.invoiceNumber}
+                              </span>
+                            )}
                           </p>
                           <div className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
                             <span className="truncate">Registró: {expense.employeeName || expense.clerkName}</span>
