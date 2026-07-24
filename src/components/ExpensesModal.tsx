@@ -4,7 +4,6 @@ import {
   DollarSign, 
   FileText, 
   Tag, 
-  CreditCard, 
   Calendar, 
   User, 
   Plus, 
@@ -39,26 +38,20 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
   onClose,
   movements,
   currentEmployee,
-  clerkName,
-  forcePaymentMethod
+  clerkName
 }) => {
   const { showAlert } = useAlert();
   const [amount, setAmount] = useState<string>('');
   const [concept, setConcept] = useState<string>('');
   const [category, setCategory] = useState<string>('Servicios');
   const [customCategory, setCustomCategory] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const paymentMethod = 'cash' as const;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expenseType, setExpenseType] = useState<'gasto' | 'pago_factura'>('gasto');
   const [isOperational, setIsOperational] = useState(true);
 
   React.useEffect(() => {
     if (isOpen) {
-      if (forcePaymentMethod) {
-        setPaymentMethod(forcePaymentMethod);
-      } else {
-        setPaymentMethod('cash');
-      }
       setAmount('');
       setConcept('');
       setCategory('Servicios');
@@ -66,7 +59,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
       setExpenseType('gasto');
       setIsOperational(true);
     }
-  }, [isOpen, forcePaymentMethod]);
+  }, [isOpen]);
 
   const activeCategory = category === 'Otro' ? customCategory : category;
 
@@ -115,7 +108,6 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
       setConcept('');
       setCategory('Servicios');
       setCustomCategory('');
-      setPaymentMethod(forcePaymentMethod || 'cash');
       setExpenseType('gasto');
       setIsOperational(true);
     } catch (error) {
@@ -302,45 +294,6 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                     />
                   )}
                 </div>
-
-                {/* Payment Method */}
-                {forcePaymentMethod ? (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
-                      <CreditCard className="w-3.5 h-3.5" /> Método de Pago
-                    </label>
-                    <div className="bg-slate-100 border border-slate-200 rounded-2xl p-3 flex justify-between items-center text-xs font-bold text-slate-700">
-                      <span>💵 Efectivo</span>
-                      <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md font-extrabold uppercase">Fijado en caja</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
-                      <CreditCard className="w-3.5 h-3.5" /> Método de Pago
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: 'cash', label: '💵 Efectivo' },
-                        { id: 'card', label: '💳 Tarjeta' },
-                        { id: 'transfer', label: '🏦 Transf.' }
-                      ].map((method) => (
-                        <button
-                          key={method.id}
-                          type="button"
-                          onClick={() => setPaymentMethod(method.id as any)}
-                          className={`py-2.5 px-2 text-xs font-bold rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                            paymentMethod === method.id 
-                              ? 'bg-slate-900 border-slate-900 text-white shadow-xs' 
-                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100/50'
-                          }`}
-                        >
-                          <span>{method.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Submitter info (Read only) */}
                 <div className="bg-slate-50 border border-slate-150 rounded-2xl p-3 flex justify-between items-center text-xs text-slate-500 font-medium">

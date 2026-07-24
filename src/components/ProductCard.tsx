@@ -70,7 +70,10 @@ export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart,
       {/* Bottom Section: Info */}
       <div className="w-full mt-2 flex-1 flex flex-col justify-between">
         <div>
-          <h3 className="font-bold text-gray-800 line-clamp-1 text-xs sm:text-sm leading-tight group-hover:text-indigo-600 transition-colors">
+          <h3
+            title={product.name}
+            className="font-bold text-gray-800 line-clamp-1 text-xs sm:text-sm leading-tight group-hover:text-indigo-600 transition-colors uppercase"
+          >
             {product.name}
           </h3>
           <p className="text-[10px] text-gray-400 font-mono mt-0.5">#{product.barcode || product.id}</p>
