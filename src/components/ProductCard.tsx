@@ -1,6 +1,6 @@
 import React from 'react';
 import { Product } from '../types';
-import { Plus, AlertTriangle } from 'lucide-react';
+import { Plus, AlertTriangle, Package } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -10,6 +10,7 @@ interface ProductCardProps {
 
 export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart, cartQuantity }) => {
   const isNegativeStock = product.stock <= 0;
+  const hasPackagings = product.packagings && product.packagings.length > 0;
 
   return (
     <button
@@ -49,6 +50,14 @@ export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart,
         }`}>
           Stock: {product.stock}
         </span>
+
+        {/* Packaging Badge */}
+        {hasPackagings && (
+          <span className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-indigo-600/90 text-white backdrop-blur-xs z-20 shadow-2xs">
+            <Package className="w-2.5 h-2.5" />
+            {product.packagings!.length} presentaciones
+          </span>
+        )}
 
         {/* Cart Quantity Badge (Float over the image) */}
         {cartQuantity > 0 && (

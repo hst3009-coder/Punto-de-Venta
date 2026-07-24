@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { Product, Category } from '../../types';
-import { getPreTaxAmount } from '../../lib/money';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Product, Category, DashboardConfig, ProductPackaging } from '../../types';
+import { getPreTaxAmount, getCategoryProfitTarget } from '../../lib/money';
 import { SupplierPicker } from '../SupplierPicker';
-import { Check, X, Tag, Barcode, DollarSign, Percent, Folder, Plus, ShoppingBag, AlertTriangle } from 'lucide-react';
+import { Check, X, Tag, Barcode, DollarSign, Percent, Folder, Plus, ShoppingBag, AlertTriangle, Sparkles, TrendingUp, Package, Trash2 } from 'lucide-react';
 
 interface ProductFormTabProps {
   id: string | null;
   products: Product[];
   categories: Category[];
+  dashboardConfig?: DashboardConfig;
   onSuccess: (product: Product) => void;
   onCancel: () => void;
 }
 
-const EMOJI_OPTIONS = ['☕', '🥤', '🥐', '🍔', '🍕', '🍰', '🧁', '🍩', '🥯', '🍟', '🥗', '🥑', '🌮', '🥩', '🍣', '🍎', '🍓', '🍪', '🍫', '🍦', '🍺', '🍷', '💧', '🛍️', '📦'];
+const EMOJI_OPTIONS = ['📦', '🧴', '🧵', '🧺', '💄', '🧽', '🔌', '🪒', '🧻', '👕', '🎀', '🖊️', '🏷️', '🛍️', '👟', '🕶️', '💊', '🔋', '🛠️', '📱', '📚', '🧼', '🧸', '💡', '🎒', '🧢', '🔑', '🍳', '🥣', '🛒'];
 
 export const ProductFormTab: React.FC<ProductFormTabProps> = ({
   id,
   products,
   categories,
+  dashboardConfig,
   onSuccess,
   onCancel,
 }) => {
@@ -28,18 +30,30 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
   const [barcode, setBarcode] = useState('');
   const [code, setCode] = useState('');
   const [sku, setSku] = useState('');
+  const [category, setCategory] = useState('');
+
+  const suggestedTargetProfit = useMemo(() => {
+    return getCategoryProfitTarget(category, dashboardConfig?.categoryProfitTargets, categories);
+  }, [category, dashboardConfig?.categoryProfitTargets, categories]);
   const [cost, setCost] = useState('');
   const [price, setPrice] = useState('');
   const [profitPercent, setProfitPercent] = useState('');
-  const [category, setCategory] = useState('');
-  const [stock, setStock] = useState('50');
-  const [emoji, setEmoji] = useState('🏷️');
+  const [stock, setStock] = useState('');
+  const [emoji, setEmoji] = useState('📦');
   const [imageUrl, setImageUrl] = useState('');
   const [imageType, setImageType] = useState<'emoji' | 'url'>('emoji');
   const [provider, setProvider] = useState('');
   const [expirationDate, setExpirationDate] = useState('');
   const [taxExempt, setTaxExempt] = useState(false);
+  const [packagings, setPackagings] = useState<ProductPackaging[]>([]);
+  const [newPkgName, setNewPkgName] = useState('');
+  const [newPkgUnits, setNewPkgUnits] = useState('');
+  const [newPkgPrice, setNewPkgPrice] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // AI Category Suggestion State
+  const [aiSuggestedCategory, setAiSuggestedCategory] = useState<string | null>(null);
+  const [isSuggestingCategory, setIsSuggestingCategory] = useState(false);
 
   // Load product if editing
   useEffect(() => {
@@ -55,12 +69,13 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
         setProfitPercent(prod.profitPercent !== undefined ? prod.profitPercent.toString() : '');
         setCategory(prod.category || '');
         setStock(prod.stock !== undefined ? prod.stock.toString() : '0');
-        setEmoji(prod.emoji || '🏷️');
+        setEmoji(prod.emoji || '📦');
         setImageUrl(prod.imageUrl || '');
         setImageType(prod.imageUrl ? 'url' : 'emoji');
         setProvider(prod.provider || '');
         setExpirationDate(prod.expirationDate || '');
         setTaxExempt(!!prod.taxExempt);
+        setPackagings(prod.packagings || []);
       }
     } else {
       // Set defaults for new product
@@ -71,17 +86,98 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
       setCost('');
       setPrice('');
       setProfitPercent('');
-      setCategory(categories.filter((c) => c.id !== 'all')[0]?.id || 'cafeteria');
-      setStock('50');
-      setEmoji('☕');
+      setCategory(categories.filter((c) => c.id !== 'all')[0]?.id || 'otros');
+      setStock('');
+      setEmoji('📦');
       setImageUrl('');
       setImageType('emoji');
       setProvider('');
       setExpirationDate('');
       setTaxExempt(false);
+      setPackagings([]);
     }
+    setNewPkgName('');
+    setNewPkgUnits('');
+    setNewPkgPrice('');
     setError(null);
   }, [id, isEditing, products, categories]);
+
+  // AI Category suggestion effect (~800ms debounce)
+  useEffect(() => {
+    const trimmedName = name.trim();
+    if (trimmedName.length < 3) {
+      setAiSuggestedCategory(null);
+      setIsSuggestingCategory(false);
+      return;
+    }
+
+    setIsSuggestingCategory(true);
+    const timer = setTimeout(async () => {
+      try {
+        const activeCats = categories
+          .filter((c) => c.id !== 'all')
+          .map((c) => ({ id: c.id, name: c.name }));
+
+        const res = await fetch('/api/suggest-category', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productName: trimmedName, categories: activeCats }),
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to get AI category suggestion');
+        }
+
+        const data = await res.json();
+        if (data.suggestion) {
+          setAiSuggestedCategory(data.suggestion);
+        } else {
+          setAiSuggestedCategory(null);
+        }
+      } catch (err) {
+        console.warn('AI category suggestion failed:', err);
+        setAiSuggestedCategory(null);
+      } finally {
+        setIsSuggestingCategory(false);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [name, categories]);
+
+  const handleApplyAiCategory = () => {
+    if (!aiSuggestedCategory) return;
+    const matched = categories.find(
+      (c) => c.id.toLowerCase() === aiSuggestedCategory.toLowerCase() ||
+             c.name.toLowerCase() === aiSuggestedCategory.toLowerCase()
+    );
+    if (matched) {
+      setCategory(matched.id);
+    } else {
+      setCategory(aiSuggestedCategory);
+    }
+  };
+
+  // Real-time check for duplicate barcode or code
+  const barcodeDuplicate = useMemo(() => {
+    const clean = barcode.trim().toUpperCase();
+    if (!clean) return null;
+    return products.find((p) =>
+      (!isEditing || p.id !== id) &&
+      ((p.barcode && p.barcode.trim().toUpperCase() === clean) ||
+       (p.code && p.code.trim().toUpperCase() === clean))
+    );
+  }, [barcode, products, isEditing, id]);
+
+  const codeDuplicate = useMemo(() => {
+    const clean = code.trim().toUpperCase();
+    if (!clean) return null;
+    return products.find((p) =>
+      (!isEditing || p.id !== id) &&
+      ((p.barcode && p.barcode.trim().toUpperCase() === clean) ||
+       (p.code && p.code.trim().toUpperCase() === clean))
+    );
+  }, [code, products, isEditing, id]);
 
   // Recalculations
   const handleCostChange = (val: string) => {
@@ -146,11 +242,41 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
       return;
     }
 
-    const parsedProfit = profitPercent ? parseFloat(profitPercent) : undefined;
-    const parsedStock = parseInt(stock) || 0;
+    const cleanBarcode = barcode.trim();
+    const cleanCode = code.trim();
 
-    // Use barcode value or fallback
-    const finalBarcode = barcode.trim() || code.trim() || (isEditing ? '' : Math.floor(1000 + Math.random() * 9000).toString());
+    // Block saving if barcode is duplicate
+    if (cleanBarcode && barcodeDuplicate) {
+      setError(`Este código de barras ya está en uso por ${barcodeDuplicate.name}`);
+      return;
+    }
+
+    if (cleanCode && codeDuplicate) {
+      setError(`Este código de barras ya está en uso por ${codeDuplicate.name}`);
+      return;
+    }
+
+    const parsedProfit = profitPercent ? parseFloat(profitPercent) : undefined;
+    const parsedStock = stock.trim() === '' ? 0 : (parseInt(stock) || 0);
+
+    // Auto-generate 12-digit barcode if field is left empty
+    let finalBarcode = cleanBarcode;
+    let finalCode = cleanCode;
+
+    if (!finalBarcode && !finalCode) {
+      let generated = '';
+      let exists = true;
+      while (exists) {
+        generated = Math.floor(100000000000 + Math.random() * 900000000000).toString();
+        exists = products.some((p) => p.barcode === generated || p.code === generated);
+      }
+      finalBarcode = generated;
+      finalCode = generated;
+    } else if (!finalBarcode && finalCode) {
+      finalBarcode = finalCode;
+    } else if (finalBarcode && !finalCode) {
+      finalCode = finalBarcode;
+    }
 
     // Setup colors
     const colors = [
@@ -173,16 +299,42 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
       emoji: emoji || '🏷️',
       imageUrl: imageType === 'url' && imageUrl.trim() ? imageUrl.trim() : undefined,
       barcode: finalBarcode || undefined,
-      code: code.trim() || finalBarcode || undefined,
+      code: finalCode || undefined,
       sku: sku.trim() || undefined,
       cost: parsedCost,
       profitPercent: parsedProfit,
       provider: provider.trim() || undefined,
       expirationDate: expirationDate || undefined,
       taxExempt,
+      packagings: packagings.length > 0 ? packagings : undefined,
     };
 
     onSuccess(updatedProduct);
+
+    // If creating new product, clear form so user can enter another product without changing tabs
+    if (!isEditing) {
+      setName('');
+      setBarcode('');
+      setCode('');
+      setSku('');
+      setCost('');
+      setPrice('');
+      setProfitPercent('');
+      setCategory(categories.filter((c) => c.id !== 'all')[0]?.id || 'otros');
+      setStock('');
+      setEmoji('📦');
+      setImageUrl('');
+      setImageType('emoji');
+      setProvider('');
+      setExpirationDate('');
+      setTaxExempt(false);
+      setPackagings([]);
+      setNewPkgName('');
+      setNewPkgUnits('');
+      setNewPkgPrice('');
+      setError(null);
+      setAiSuggestedCategory(null);
+    }
   };
 
   return (
@@ -220,7 +372,7 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
             <input
               type="text"
               required
-              placeholder="Ej. Café Americano Intenso"
+              placeholder="Ej. Detergente Líquido Multiusos"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all"
@@ -237,6 +389,11 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold text-slate-850 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all cursor-pointer"
               >
+                {category && !categories.some(c => c.id === category || c.name.toLowerCase() === category.toLowerCase()) && (
+                  <option value={category}>
+                    ✨ {category}
+                  </option>
+                )}
                 {categories
                   .filter((c) => c.id !== 'all')
                   .map((c) => (
@@ -245,6 +402,28 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                     </option>
                   ))}
               </select>
+
+              {/* AI Category Suggestion Chip */}
+              {isSuggestingCategory && (
+                <p className="text-[10px] text-indigo-500 font-bold mt-1.5 flex items-center gap-1 animate-pulse">
+                  <Sparkles className="w-3 h-3 shrink-0" />
+                  <span>Sugerencia IA consultando...</span>
+                </p>
+              )}
+
+              {!isSuggestingCategory && aiSuggestedCategory && (
+                <div className="mt-1.5">
+                  <button
+                    type="button"
+                    onClick={handleApplyAiCategory}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer shadow-2xs group"
+                    title="Hacer clic para aplicar esta sugerencia de categoría"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600 group-hover:rotate-12 transition-transform shrink-0" />
+                    <span>Sugerencia: <strong className="underline decoration-indigo-300">{aiSuggestedCategory}</strong> — usar</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -255,7 +434,7 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                 type="number"
                 required
                 min="0"
-                placeholder="50"
+                placeholder="Ej. 0"
                 value={stock}
                 onChange={(e) => setStock(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all"
@@ -273,8 +452,14 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                 placeholder="Escanear o ingresar"
                 value={barcode}
                 onChange={(e) => setBarcode(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all"
+                className={`w-full px-3 py-2.5 rounded-xl border ${barcodeDuplicate ? 'border-rose-400 bg-rose-50/50' : 'border-slate-200 bg-slate-50'} focus:bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all`}
               />
+              {barcodeDuplicate && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  <span>Este código de barras ya está en uso por {barcodeDuplicate.name}</span>
+                </p>
+              )}
             </div>
 
             <div>
@@ -286,8 +471,14 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                 placeholder="Código POS"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all"
+                className={`w-full px-3 py-2.5 rounded-xl border ${codeDuplicate ? 'border-rose-400 bg-rose-50/50' : 'border-slate-200 bg-slate-50'} focus:bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all`}
               />
+              {codeDuplicate && (
+                <p className="text-[10px] font-bold text-rose-600 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  <span>Este código de barras ya está en uso por {codeDuplicate.name}</span>
+                </p>
+              )}
             </div>
 
             <div>
@@ -391,6 +582,13 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                 </div>
               </div>
             </div>
+
+            {suggestedTargetProfit !== undefined && (
+              <div className="mt-2 text-[11px] font-bold text-indigo-700 bg-indigo-50/80 border border-indigo-200/80 rounded-xl px-3 py-1.5 flex items-center gap-1.5 shadow-2xs">
+                <TrendingUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Sugerido para esta categoría: <strong>{suggestedTargetProfit}%</strong></span>
+              </div>
+            )}
 
             <div className="flex items-center gap-2 mt-2">
               <input
@@ -539,6 +737,130 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
               )}
             </div>
           </div>
+        </div>
+
+        {/* Full Width Section: Empaques Alternativos */}
+        <div className="col-span-1 md:col-span-2 p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-indigo-600 shrink-0" />
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Empaques Alternativos / Presentaciones</h4>
+                <p className="text-[10px] text-slate-400 font-semibold">Configura ventas por caja, pallet o paquete con su equivalencia en unidades y precio del empaque completo.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Form to add a new packaging */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white p-3 rounded-xl border border-slate-200">
+            <div className="sm:col-span-5">
+              <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Nombre del empaque</label>
+              <input
+                type="text"
+                placeholder="Ej. Caja de 12, Pallet de 100"
+                value={newPkgName}
+                onChange={(e) => setNewPkgName(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Unidades por empaque</label>
+              <input
+                type="number"
+                min="1"
+                placeholder="Ej. 12"
+                value={newPkgUnits}
+                onChange={(e) => setNewPkgUnits(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Precio total ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Ej. 550.00"
+                value={newPkgPrice}
+                onChange={(e) => setNewPkgPrice(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="sm:col-span-1 flex items-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newPkgName.trim()) {
+                    setError('Ingresa el nombre del empaque (ej. Caja de 12)');
+                    return;
+                  }
+                  const units = parseInt(newPkgUnits);
+                  if (isNaN(units) || units <= 0) {
+                    setError('Ingresa un número válido de unidades por empaque (mínimo 1)');
+                    return;
+                  }
+                  const pkgPrice = parseFloat(newPkgPrice);
+                  if (isNaN(pkgPrice) || pkgPrice < 0) {
+                    setError('Ingresa un precio válido para el empaque');
+                    return;
+                  }
+
+                  const newPackaging: ProductPackaging = {
+                    id: `pkg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                    name: newPkgName.trim(),
+                    unitsPerPackage: units,
+                    price: pkgPrice,
+                  };
+
+                  setPackagings((prev) => [...prev, newPackaging]);
+                  setNewPkgName('');
+                  setNewPkgUnits('');
+                  setNewPkgPrice('');
+                  setError(null);
+                }}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center"
+                title="Agregar Empaque"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* List of configured packagings */}
+          {packagings.length === 0 ? (
+            <p className="text-xs text-slate-400 italic font-medium text-center py-2">
+              Sin empaques adicionales configurados (se venderá únicamente por unidad individual).
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {packagings.map((pkg) => (
+                <div key={pkg.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3.5 py-2">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-indigo-500" />
+                      {pkg.name}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">
+                      Contiene {pkg.unitsPerPackage} {pkg.unitsPerPackage === 1 ? 'unidad' : 'unidades'} • RD$ {pkg.price.toFixed(2)}
+                      {pkg.unitsPerPackage > 0 && (
+                        <span className="text-slate-400 ml-1 font-normal">
+                          (RD$ {(pkg.price / pkg.unitsPerPackage).toFixed(2)}/u)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPackagings((prev) => prev.filter((p) => p.id !== pkg.id))}
+                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    title="Eliminar Empaque"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>

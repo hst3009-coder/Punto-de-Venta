@@ -19,7 +19,9 @@ import {
   Clock,
   Printer,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 interface CustomersViewProps {
@@ -68,8 +70,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newCreditLimit, setNewCreditLimit] = useState('5000');
+  const [newNoCreditLimit, setNewNoCreditLimit] = useState(false);
   const [newOpeningDebt, setNewOpeningDebt] = useState('');
+  const [newPriceListId, setNewPriceListId] = useState('');
   const [formError, setFormError] = useState('');
+
+  // Edit customer form state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editCreditLimit, setEditCreditLimit] = useState('5000');
+  const [editNoCreditLimit, setEditNoCreditLimit] = useState(false);
+  const [editPriceListId, setEditPriceListId] = useState('');
+  const [editFormError, setEditFormError] = useState('');
 
   // Payment form state
   const [paymentAmountStr, setPaymentAmountStr] = useState('');
@@ -161,8 +175,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       name: newName.trim(),
       phone: newPhone.trim() || undefined,
       email: newEmail.trim() || undefined,
-      creditLimit: limitVal,
+      creditLimit: newNoCreditLimit ? 0 : limitVal,
+      noCreditLimit: newNoCreditLimit,
       openingDebt: openingDebtVal || undefined,
+      priceListId: newPriceListId || undefined,
       createdAt: new Date().toISOString()
     };
 
@@ -177,11 +193,87 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       setNewPhone('');
       setNewEmail('');
       setNewCreditLimit('5000');
+      setNewNoCreditLimit(false);
       setNewOpeningDebt('');
+      setNewPriceListId('');
       setShowAddForm(false);
     } catch (err) {
       console.error('Error creating customer:', err);
       setFormError('Error al guardar en la base de datos.');
+    }
+  };
+
+  const handleOpenEditModal = () => {
+    if (!selectedCustomer) return;
+    setEditName(selectedCustomer.name);
+    setEditPhone(selectedCustomer.phone || '');
+    setEditEmail(selectedCustomer.email || '');
+    setEditNoCreditLimit(!!selectedCustomer.noCreditLimit);
+    setEditCreditLimit(selectedCustomer.creditLimit ? selectedCustomer.creditLimit.toString() : '5000');
+    setEditPriceListId(selectedCustomer.priceListId || '');
+    setEditFormError('');
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer) return;
+    setEditFormError('');
+
+    if (!editName.trim()) {
+      setEditFormError('El nombre es requerido.');
+      return;
+    }
+
+    const limitVal = parseFloat(editCreditLimit) || 0;
+
+    const updatedCust: Customer = {
+      ...selectedCustomer,
+      name: editName.trim(),
+      phone: editPhone.trim() || undefined,
+      email: editEmail.trim() || undefined,
+      noCreditLimit: editNoCreditLimit,
+      creditLimit: editNoCreditLimit ? 0 : limitVal,
+      priceListId: editPriceListId || undefined,
+    };
+
+    try {
+      await firestoreService.setDocWithId('customers', selectedCustomer.id, updatedCust);
+      setIsEditModalOpen(false);
+      await showAlert('Cliente Actualizado', 'Los datos del cliente se actualizaron con éxito.', 'success');
+    } catch (err) {
+      console.error('Error updating customer:', err);
+      setEditFormError('Error al actualizar en la base de datos.');
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!selectedCustomer) return;
+    const currentDebt = customerDebts[selectedCustomer.id] || 0;
+
+    if (currentDebt > 0) {
+      await showAlert(
+        'No se puede eliminar',
+        `Este cliente tiene una deuda pendiente de RD$ ${currentDebt.toFixed(2)}, no se puede eliminar.`,
+        'warning'
+      );
+      return;
+    }
+
+    const confirmDelete = await showConfirm(
+      'Eliminar Cliente',
+      `¿Está seguro de que desea eliminar al cliente "${selectedCustomer.name}"? Esta acción no se puede deshacer.`
+    );
+
+    if (confirmDelete) {
+      try {
+        await firestoreService.deleteDoc('customers', selectedCustomer.id);
+        setSelectedCustomerId(null);
+        await showAlert('Cliente Eliminado', 'El cliente ha sido eliminado exitosamente.', 'success');
+      } catch (err) {
+        console.error('Error deleting customer:', err);
+        await showAlert('Error', 'No se pudo eliminar el cliente.', 'error');
+      }
     }
   };
 
@@ -356,10 +448,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <input
                       type="number"
                       value={newCreditLimit}
+                      disabled={newNoCreditLimit}
                       onChange={(e) => setNewCreditLimit(e.target.value)}
                       placeholder="5000"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none"
+                      className={`w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none ${
+                        newNoCreditLimit ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white'
+                      }`}
                     />
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <input
+                        type="checkbox"
+                        id="newNoCreditLimit"
+                        checked={newNoCreditLimit}
+                        onChange={(e) => setNewNoCreditLimit(e.target.checked)}
+                        className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 cursor-pointer"
+                      />
+                      <label htmlFor="newNoCreditLimit" className="text-[10px] font-bold text-slate-600 cursor-pointer select-none">
+                        Sin límite
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -384,6 +491,22 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     placeholder="RD$ 0.00"
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Lista de Precios Especial</label>
+                  <select
+                    value={newPriceListId}
+                    onChange={(e) => setNewPriceListId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">-- Ninguna (Precio Normal) --</option>
+                    {(dashboardConfig?.clientPriceLists || []).map((pl) => (
+                      <option key={pl.id} value={pl.id}>
+                        {pl.name} (+{pl.profitPercent}% ganancia sobre costo)
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <button
@@ -418,7 +541,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-extrabold text-xs text-slate-800 truncate">{c.name}</p>
+                      <p className="font-extrabold text-xs text-slate-800 truncate uppercase" title={c.name}>{c.name}</p>
                       {c.phone && (
                         <p className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1">
                           <Phone className="w-3 h-3 shrink-0" />
@@ -467,12 +590,42 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           {selectedCustomer.email}
                         </span>
                       )}
-                      <span className="text-slate-400">Límite Crédito: RD$ {(selectedCustomer.creditLimit || 0).toFixed(2)}</span>
+                      <span className="text-slate-400">
+                        Límite Crédito: {selectedCustomer.noCreditLimit ? 'Sin límite' : `RD$ ${(selectedCustomer.creditLimit || 0).toFixed(2)}`}
+                      </span>
+                      {selectedCustomer.priceListId && (
+                        (() => {
+                          const pl = (dashboardConfig?.clientPriceLists || []).find(p => p.id === selectedCustomer.priceListId);
+                          return pl ? (
+                            <span className="flex items-center gap-1 text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg font-bold">
+                              🏷️ Lista: {pl.name} (+{pl.profitPercent}%)
+                            </span>
+                          ) : null;
+                        })()
+                      )}
                     </div>
                   </div>
 
                   {/* Account Actions / Debt Balance */}
                   <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2 mr-2">
+                      <button
+                        onClick={handleOpenEditModal}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl flex items-center gap-1 transition-all cursor-pointer"
+                        title="Editar cliente"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Editar</span>
+                      </button>
+                      <button
+                        onClick={handleDeleteCustomer}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center gap-1 transition-all cursor-pointer"
+                        title="Eliminar cliente"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
                     <div className="text-right">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Deuda Pendiente</span>
                       <span className={`text-xl font-black font-mono ${
@@ -830,6 +983,133 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </aside>
 
       </div>
+
+      {/* Edit Customer Modal */}
+      {isEditModalOpen && selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="text-base font-black text-slate-850 uppercase">Editar Cliente</h3>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editFormError && (
+              <p className="text-xs text-rose-600 font-bold bg-rose-50 p-2.5 rounded-xl border border-rose-100">
+                {editFormError}
+              </p>
+            )}
+
+            <form onSubmit={handleUpdateCustomer} className="space-y-3.5">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Nombre Completo *</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold uppercase"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Celular</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="809-555-0100"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Límite Crédito</label>
+                  <input
+                    type="number"
+                    value={editCreditLimit}
+                    disabled={editNoCreditLimit}
+                    onChange={(e) => setEditCreditLimit(e.target.value)}
+                    placeholder="5000"
+                    className={`w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none ${
+                      editNoCreditLimit ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white'
+                    }`}
+                  />
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <input
+                      type="checkbox"
+                      id="editNoCreditLimit"
+                      checked={editNoCreditLimit}
+                      onChange={(e) => setEditNoCreditLimit(e.target.checked)}
+                      className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 cursor-pointer"
+                    />
+                    <label htmlFor="editNoCreditLimit" className="text-[10px] font-bold text-slate-600 cursor-pointer select-none">
+                      Sin límite
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Lista de Precios Especial</label>
+                <select
+                  value={editPriceListId}
+                  onChange={(e) => setEditPriceListId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">-- Ninguna (Precio Normal) --</option>
+                  {(dashboardConfig?.clientPriceLists || []).map((pl) => (
+                    <option key={pl.id} value={pl.id}>
+                      {pl.name} (+{pl.profitPercent}% ganancia sobre costo)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Deuda Anterior (No Editable)</label>
+                <input
+                  type="text"
+                  disabled
+                  value={`RD$ ${(selectedCustomer.openingDebt || 0).toFixed(2)}`}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-100 text-slate-500 font-bold cursor-not-allowed"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -10,7 +10,8 @@ import {
   Lock, 
   AlertTriangle, 
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  Users
 } from 'lucide-react';
 import { Sale, Employee, Closure, Movement, CustomerRefund, DashboardConfig } from '../types';
 import { firestoreService } from '../lib/firebase';
@@ -122,6 +123,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
     let card = 0;
     let transfer = 0;
     let qr = 0;
+    let credit = 0;
 
     todaySales.forEach(sale => {
       total += sale.total;
@@ -131,6 +133,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
           else if (b.method === 'card') card += b.amount;
           else if (b.method === 'transfer') transfer += b.amount;
           else if (b.method === 'qr') qr += b.amount;
+          else if (b.method === 'credit') credit += b.amount;
         });
       } else if (sale.paymentMethod === 'cash') {
         cash += sale.total;
@@ -140,11 +143,51 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
         transfer += sale.total;
       } else if (sale.paymentMethod === 'qr') {
         qr += sale.total;
+      } else if (sale.paymentMethod === 'credit' || sale.isCredit) {
+        credit += sale.total;
       }
     });
 
-    return { total, cash, card, transfer, qr, count: todaySales.length };
+    return { total, cash, card, transfer, qr, credit, count: todaySales.length };
   }, [todaySales]);
+
+  // Filter credit sales (full credit or credit breakdown component) for current shift
+  const shiftCreditSales = useMemo(() => {
+    return todaySales
+      .map(sale => {
+        let creditAmount = 0;
+        if (sale.paymentMethod === 'credit') {
+          creditAmount = sale.total;
+        } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+          creditAmount = sale.paymentBreakdown
+            .filter(b => b.method === 'credit')
+            .reduce((sum, b) => sum + b.amount, 0);
+        } else if (sale.isCredit) {
+          creditAmount = sale.total;
+        }
+
+        if (creditAmount <= 0) return null;
+
+        const dateVal = sale.createdAt || sale.date;
+        const timeStr = dateVal 
+          ? new Date(dateVal).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+          : '--:--';
+        const customerName = sale.customerName || 'Cliente sin nombre';
+
+        return {
+          id: sale.id,
+          ticketNumber: sale.ticketNumber,
+          customerName,
+          amount: creditAmount,
+          timeStr,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [todaySales]);
+
+  const shiftCreditSalesTotal = useMemo(() => {
+    return shiftCreditSales.reduce((acc, item) => acc + item.amount, 0);
+  }, [shiftCreditSales]);
 
   // Expected cash in register: Initial cash + Cash Sales
   // Filter movements (egresos) for the current shift using the same shift boundaries as sales
@@ -171,6 +214,8 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
 
       return movements.filter(m => {
         if (m.type !== 'out') return false;
+        const source = m.source ?? 'shift';
+        if (source !== 'shift') return false;
         if (m.employeeId !== currentEmployee.id) return false;
         const mTime = new Date(m.createdAt || m.date).getTime();
         return mTime > lastClosureTime;
@@ -183,6 +228,8 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
 
       return movements.filter(m => {
         if (m.type !== 'out') return false;
+        const source = m.source ?? 'shift';
+        if (source !== 'shift') return false;
         const mTime = new Date(m.createdAt || m.date).getTime();
         return mTime >= startOfTodayTime;
       });
@@ -194,6 +241,30 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
     return shiftExpenses
       .filter(m => m.paymentMethod === 'cash')
       .reduce((acc, m) => acc + m.amount, 0);
+  }, [shiftExpenses]);
+
+  // Detailed breakdown list of expenses for the shift
+  const shiftExpensesDetailed = useMemo(() => {
+    return shiftExpenses.map(m => {
+      const dateVal = m.createdAt || m.date;
+      const timeStr = dateVal 
+        ? new Date(dateVal).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        : '--:--';
+      const concept = m.concept || m.category || 'Gasto / Egreso';
+      const methodLabel = m.paymentMethod === 'cash' ? 'Efectivo' : m.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia';
+      return {
+        id: m.id,
+        concept,
+        amount: m.amount,
+        paymentMethod: m.paymentMethod,
+        methodLabel,
+        timeStr,
+      };
+    });
+  }, [shiftExpenses]);
+
+  const shiftExpensesTotalAll = useMemo(() => {
+    return shiftExpenses.reduce((acc, m) => acc + m.amount, 0);
   }, [shiftExpenses]);
 
   // Filter customer refunds (method 'cash') for current shift
@@ -416,6 +487,13 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                 <span className="font-bold text-slate-800">${salesMetrics.qr.toFixed(2)}</span>
               </div>
 
+              {salesMetrics.credit > 0 && (
+                <div className="flex justify-between items-center text-amber-800 font-semibold">
+                  <span className="flex items-center gap-1.5">👥 Ventas a Crédito:</span>
+                  <span className="font-bold font-mono">${salesMetrics.credit.toFixed(2)}</span>
+                </div>
+              )}
+
               <div className="border-t border-slate-200 pt-3 flex justify-between items-center text-sm font-black text-slate-900 bg-slate-100/50 -mx-4 -mb-4 p-4 rounded-b-2xl">
                 <span>Venta Total del Turno:</span>
                 <span className="text-indigo-600 text-base font-extrabold">${salesMetrics.total.toFixed(2)}</span>
@@ -423,13 +501,70 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
             </div>
           </div>
 
-          {/* Reconciliation fields */}
-          <div className="space-y-4 print:hidden">
+          {/* Detailed Expenses Breakdown */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Receipt className="w-3.5 h-3.5 text-rose-600" /> Egresos del Turno ({shiftExpensesDetailed.length})
+              </span>
+              <span className="font-mono text-rose-600 font-bold">-${shiftExpensesTotalAll.toFixed(2)}</span>
+            </h4>
+
+            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-3 space-y-2 text-xs">
+              {shiftExpensesDetailed.length > 0 ? (
+                shiftExpensesDetailed.map(m => (
+                  <div key={m.id} className="flex items-center justify-between py-1.5 border-b border-slate-200/60 last:border-none">
+                    <div className="flex flex-col pr-2">
+                      <span className="font-bold text-slate-800">{m.concept}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {m.timeStr} • {m.methodLabel}
+                      </span>
+                    </div>
+                    <span className="font-extrabold text-rose-600 font-mono shrink-0">-${m.amount.toFixed(2)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-2 text-slate-400 font-medium text-[11px] italic">
+                  Sin egresos registrados en este turno
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Credit Sales Breakdown (only shown if there are credit sales) */}
+          {shiftCreditSales.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-amber-600" /> Ventas a Crédito de este Turno ({shiftCreditSales.length})
+                </span>
+                <span className="font-mono text-amber-700 font-extrabold">${shiftCreditSalesTotal.toFixed(2)}</span>
+              </h4>
+
+              <div className="bg-slate-50 rounded-2xl border border-slate-200 p-3 space-y-2 text-xs">
+                {shiftCreditSales.map(item => (
+                  <div key={item.id} className="flex items-center justify-between py-1.5 border-b border-slate-200/60 last:border-none">
+                    <div className="flex flex-col pr-2">
+                      <span className="font-bold text-slate-800">{item.customerName}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {item.ticketNumber ? `Ticket #${item.ticketNumber} • ` : ''}{item.timeStr}
+                      </span>
+                    </div>
+                    <span className="font-extrabold text-amber-800 font-mono shrink-0">${item.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reconciliation fields & summary */}
+          <div className="space-y-4">
             <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
               <Coins className="w-3.5 h-3.5 text-slate-400" /> Conciliación y Arqueo de Caja
             </h4>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Input controls (hidden in print) */}
+            <div className="grid grid-cols-2 gap-4 print:hidden">
               <div>
                 <label className="text-[11px] font-bold text-slate-500 block mb-1">
                   Fondo Inicial ($)
@@ -473,6 +608,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
               </div>
             </div>
 
+            {/* Summary card (visible on screen and in print) */}
             <div className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-2.5 text-xs">
               <div className="flex justify-between font-medium">
                 <span className="text-slate-500">Fondo Inicial:</span>

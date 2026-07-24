@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote } from './types';
+import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote, ProductPackaging } from './types';
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
+import { PackagingSelectModal } from './components/PackagingSelectModal';
 // Lazy-loaded modules for code splitting and initial bundle size optimization
 const PaymentModal = React.lazy(() => import('./components/PaymentModal').then(m => ({ default: m.PaymentModal })));
 const CorteTurnoModal = React.lazy(() => import('./components/CorteTurnoModal').then(m => ({ default: m.CorteTurnoModal })));
@@ -17,6 +18,7 @@ const DashboardView = React.lazy(() => import('./components/DashboardView').then
 import { firestoreService, authService } from './lib/firebase';
 import { roundCents, roundUpToNearestFive } from './lib/money';
 import { getSaleTimestamp } from './lib/dates';
+import { getListPrice } from './lib/priceLists';
 import { matchesProductSearch, rankSearchResults } from './lib/search';
 import { LoginScreen } from './components/LoginScreen';
 import { PinLockScreen } from './components/PinLockScreen';
@@ -33,6 +35,7 @@ import {
   Coins,
   Receipt,
   User,
+  Users,
   Sparkles,
   Layers,
   ChevronRight,
@@ -115,37 +118,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [selectedCartItemId, setSelectedCartItemId] = useState<string | null>(null);
-  
-  // --- Totals Computations ---
-  const totals = useMemo(() => {
-    let totalSubtotal = 0;
-    let totalTax = 0;
-    let rawTotal = 0;
-
-    cart.forEach((item) => {
-      const itemTotal = item.product.price * item.quantity;
-      rawTotal += itemTotal;
-
-      if (item.product.taxExempt) {
-        totalSubtotal += itemTotal;
-        // totalTax += 0;
-      } else {
-        const itemSubtotal = roundCents(itemTotal / 1.18);
-        const itemTax = roundCents(itemTotal - itemSubtotal);
-        totalSubtotal += itemSubtotal;
-        totalTax += itemTax;
-      }
-    });
-
-    const finalTotal = roundUpToNearestFive(rawTotal);
-    
-    return { 
-      subtotal: roundCents(totalSubtotal), 
-      tax: roundCents(totalTax), 
-      total: finalTotal, 
-      finalTotal 
-    };
-  }, [cart]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   
   const [salesHistory, setSalesHistory] = useState<Sale[]>(() => {
     const saved = localStorage.getItem('pos_sales');
@@ -303,6 +276,78 @@ export default function App() {
   });
   const [isSavingPending, setIsSavingPending] = useState(false);
   const [pendingRefName, setPendingRefName] = useState('');
+  const [selectedProductForPackaging, setSelectedProductForPackaging] = useState<Product | null>(null);
+
+  const getCartItemKey = (productId: string, packagingId?: string): string => {
+    return packagingId ? `${productId}_pkg_${packagingId}` : productId;
+  };
+
+  // --- Customers State ---
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('pos_customers');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return [];
+  });
+
+  const activeCustomer = useMemo(() => {
+    return customers.find(c => c.id === selectedCustomerId) || null;
+  }, [customers, selectedCustomerId]);
+
+  const activePriceList = useMemo(() => {
+    if (!activeCustomer?.priceListId) return null;
+    return (dashboardConfig?.clientPriceLists || []).find(pl => pl.id === activeCustomer.priceListId) || null;
+  }, [activeCustomer, dashboardConfig?.clientPriceLists]);
+
+  const effectiveCart = useMemo(() => {
+    if (!activePriceList) return cart;
+    return cart.map((item) => {
+      if (item.selectedPackaging) return item;
+      return {
+        ...item,
+        product: {
+          ...item.product,
+          price: getListPrice(item.product, activePriceList),
+        },
+      };
+    });
+  }, [cart, activePriceList]);
+  
+  // --- Totals Computations ---
+  const totals = useMemo(() => {
+    let totalSubtotal = 0;
+    let totalTax = 0;
+    let rawTotal = 0;
+
+    effectiveCart.forEach((item) => {
+      const itemTotal = item.product.price * item.quantity;
+      rawTotal += itemTotal;
+
+      if (item.product.taxExempt) {
+        totalSubtotal += itemTotal;
+      } else {
+        const itemSubtotal = roundCents(itemTotal / 1.18);
+        const itemTax = roundCents(itemTotal - itemSubtotal);
+        totalSubtotal += itemSubtotal;
+        totalTax += itemTax;
+      }
+    });
+
+    const finalTotal = roundUpToNearestFive(rawTotal);
+    
+    return { 
+      subtotal: roundCents(totalSubtotal), 
+      tax: roundCents(totalTax), 
+      total: finalTotal, 
+      finalTotal,
+      activePriceList
+    };
+  }, [effectiveCart, activePriceList]);
 
   const handlePutOnHold = useCallback(async (customName?: string) => {
     if (cart.length === 0) return;
@@ -418,19 +463,6 @@ export default function App() {
 
   const [movements, setMovements] = useState<Movement[]>(() => {
     const saved = localStorage.getItem('pos_movements');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  // --- Customers State ---
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('pos_customers');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -1002,63 +1034,97 @@ export default function App() {
   }, [cart.length]);
 
   // --- Cart Actions ---
-  const handleAddToCart = useCallback((product: Product) => {
+  const handleAddToCart = useCallback((product: Product, packaging?: ProductPackaging) => {
+    // If product has packagings and no packaging was explicitly chosen, show selection modal
+    if (product.packagings && product.packagings.length > 0 && !packaging) {
+      setSelectedProductForPackaging(product);
+      return;
+    }
+
     setCart((prevCart) => {
-      const existing = prevCart.find((item) => item.product.id === product.id);
-      if (existing) {
-        return prevCart.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
+      const targetKey = getCartItemKey(product.id, packaging?.id);
+      const existingIndex = prevCart.findIndex(
+        (item) => getCartItemKey(item.product.id, item.packagingId) === targetKey
+      );
+
+      if (existingIndex > -1) {
+        return prevCart.map((item, idx) =>
+          idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prevCart, { product, quantity: 1 }];
+
+      const cartProduct: Product = packaging
+        ? {
+            ...product,
+            price: packaging.price,
+            taxExempt: packaging.taxExempt !== undefined ? packaging.taxExempt : product.taxExempt,
+          }
+        : product;
+
+      return [
+        ...prevCart,
+        {
+          product: cartProduct,
+          quantity: 1,
+          packagingId: packaging?.id,
+          selectedPackaging: packaging,
+        },
+      ];
     });
-    setSelectedCartItemId(product.id);
+    setSelectedCartItemId(getCartItemKey(product.id, packaging?.id));
     setSearchQuery(''); // Clear search query upon selection
   }, []);
 
-  const handleIncrementQuantity = useCallback((productId: string) => {
+  const handleIncrementQuantity = useCallback((productId: string, packagingId?: string) => {
+    const targetKey = getCartItemKey(productId, packagingId);
     setCart((prevCart) => {
-      const item = prevCart.find((i) => i.product.id === productId);
-      if (!item) return prevCart;
-      const nextQty = item.quantity + 1;
-      return prevCart.map((i) =>
-        i.product.id === productId ? { ...i, quantity: nextQty } : i
+      return prevCart.map((item) =>
+        getCartItemKey(item.product.id, item.packagingId) === targetKey
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
       );
     });
   }, []);
 
-  const handleDecrementQuantity = useCallback(async (productId: string) => {
-    const item = cart.find((i) => i.product.id === productId);
+  const handleDecrementQuantity = useCallback(async (productId: string, packagingId?: string) => {
+    const targetKey = getCartItemKey(productId, packagingId);
+    const item = cart.find((i) => getCartItemKey(i.product.id, i.packagingId) === targetKey);
     if (!item) return;
+
+    const itemName = item.selectedPackaging
+      ? `${item.product.name} (${item.selectedPackaging.name})`
+      : item.product.name;
 
     if (item.quantity <= 1) {
       const confirmRemove = await showConfirm(
         'Confirmar eliminación',
-        `¿Está seguro de que desea eliminar "${item.product.name}" del carrito?`
+        `¿Está seguro de que desea eliminar "${itemName}" del carrito?`
       );
       if (!confirmRemove) return;
     }
 
     setCart((prevCart) => {
-      const itemInCart = prevCart.find((i) => i.product.id === productId);
+      const itemInCart = prevCart.find((i) => getCartItemKey(i.product.id, i.packagingId) === targetKey);
       if (!itemInCart) return prevCart;
       if (itemInCart.quantity <= 1) {
-        return prevCart.filter((i) => i.product.id !== productId);
+        return prevCart.filter((i) => getCartItemKey(i.product.id, i.packagingId) !== targetKey);
       }
       return prevCart.map((i) =>
-        i.product.id === productId ? { ...i, quantity: i.quantity - 1 } : i
+        getCartItemKey(i.product.id, i.packagingId) === targetKey
+          ? { ...i, quantity: i.quantity - 1 }
+          : i
       );
     });
   }, [cart, showConfirm]);
 
-  const handleRemoveFromCart = useCallback((productId: string) => {
-    setCart((prevCart) => prevCart.filter((item) => item.product.id !== productId));
+  const handleRemoveFromCart = useCallback((productId: string, packagingId?: string) => {
+    const targetKey = getCartItemKey(productId, packagingId);
+    setCart((prevCart) => prevCart.filter((item) => getCartItemKey(item.product.id, item.packagingId) !== targetKey));
   }, []);
 
   const handleClearCart = useCallback(() => {
     setCart([]);
+    setSelectedCustomerId('');
   }, []);
 
   // --- Sync Selected Cart Item Id ---
@@ -1374,9 +1440,17 @@ export default function App() {
 
     // Always perform local stock deduction and add sale record to local state immediately
     const updatedProducts = products.map((p) => {
-      const cartItem = cart.find((item) => item.product.id === p.id && item.product.category !== 'Genérico');
-      if (cartItem) {
-        return { ...p, stock: p.stock - cartItem.quantity };
+      const itemsForProduct = cart.filter(
+        (item) => item.product.id === p.id && item.product.category !== 'Genérico'
+      );
+      if (itemsForProduct.length > 0) {
+        const totalUnitsDeducted = itemsForProduct.reduce((sum, item) => {
+          const qty = item.selectedPackaging
+            ? item.selectedPackaging.unitsPerPackage * item.quantity
+            : item.quantity;
+          return sum + qty;
+        }, 0);
+        return { ...p, stock: p.stock - totalUnitsDeducted };
       }
       return p;
     });
@@ -1447,16 +1521,14 @@ export default function App() {
       });
 
       // 2. Add operations to deduct stock from products in Firestore
-      for (const item of cart) {
-        if (item.product.category === 'Genérico') continue;
-        const prod = products.find(p => p.id === item.product.id);
-        if (prod) {
-          const nextStock = prod.stock - item.quantity;
+      for (const prod of updatedProducts) {
+        const original = products.find((p) => p.id === prod.id);
+        if (original && original.stock !== prod.stock) {
           operations.push({
             type: 'update',
             collectionName: 'products',
-            id: item.product.id,
-            data: { stock: nextStock }
+            id: prod.id,
+            data: { stock: prod.stock },
           });
         }
       }
@@ -1482,6 +1554,7 @@ export default function App() {
 
     // 3. Clear cart and set recent ticket
     setCart([]);
+    setSelectedCustomerId('');
     setRecentTicket(saleWithEmployee);
   };
 
@@ -1506,7 +1579,6 @@ export default function App() {
 
   const handleCloseProductsManager = () => {
     setIsProductsManagerOpen(false);
-    setPreSelectedProductTab('catalog');
     setPreSelectedProductId(null);
   };
 
@@ -2077,6 +2149,30 @@ export default function App() {
           </form>
         )}
 
+        {/* Customer & Price List Selector */}
+        <div className="px-4 py-2 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            <select
+              value={selectedCustomerId}
+              onChange={(e) => setSelectedCustomerId(e.target.value)}
+              className="bg-transparent text-xs font-extrabold text-slate-700 truncate focus:outline-none cursor-pointer flex-1"
+            >
+              <option value="">Cliente: Público General</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.priceListId ? '🏷️' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          {totals.activePriceList && (
+            <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full shrink-0 animate-fade-in" title="Precio Mayorista/Lista aplicado">
+              🏷️ {totals.activePriceList.name} (+{totals.activePriceList.profitPercent}%)
+            </span>
+          )}
+        </div>
+
         {/* Cart List Container */}
         <div 
           ref={cartListRef}
@@ -2093,17 +2189,23 @@ export default function App() {
               </p>
             </div>
           ) : (
-            cart.map((item) => (
-              <CartItemRow
-                key={item.product.id}
-                item={item}
-                onIncrement={handleIncrementQuantity}
-                onDecrement={handleDecrementQuantity}
-                onRemove={handleRemoveFromCart}
-                isSelected={selectedCartItemId === item.product.id}
-                onSelect={() => setSelectedCartItemId(item.product.id)}
-              />
-            ))
+            effectiveCart.map((item) => {
+              const originalProduct = products.find(p => p.id === item.product.id) || item.product;
+              const itemKey = getCartItemKey(item.product.id, item.packagingId);
+              return (
+                <CartItemRow
+                  key={itemKey}
+                  item={item}
+                  originalPrice={originalProduct.price}
+                  priceListName={totals.activePriceList?.name}
+                  onIncrement={handleIncrementQuantity}
+                  onDecrement={handleDecrementQuantity}
+                  onRemove={handleRemoveFromCart}
+                  isSelected={selectedCartItemId === itemKey}
+                  onSelect={() => setSelectedCartItemId(itemKey)}
+                />
+              );
+            })
           )}
         </div>
 
@@ -2245,7 +2347,7 @@ export default function App() {
           <PaymentModal
             isOpen={isPaymentOpen}
             onClose={() => setIsPaymentOpen(false)}
-            cartItems={cart}
+            cartItems={effectiveCart}
             subtotal={totals.subtotal}
             tax={totals.tax}
             total={totals.total}
@@ -2259,6 +2361,8 @@ export default function App() {
             creditNotes={creditNotes}
             onUpdateCreditNote={handleUpdateCreditNote}
             dashboardConfig={dashboardConfig}
+            initialCustomerId={selectedCustomerId}
+            onSelectCustomer={(cid) => setSelectedCustomerId(cid)}
           />
         </React.Suspense>
       )}
@@ -2369,6 +2473,7 @@ export default function App() {
             dashboardConfig={dashboardConfig}
             onUpdateDashboardConfig={handleUpdateDashboardConfig}
             products={products}
+            categories={categories}
             customers={customers}
             salesHistory={salesHistory}
             customerPayments={customerPayments}
@@ -2400,6 +2505,7 @@ export default function App() {
             onClose={handleCloseProductsManager}
             products={products}
             categories={categories}
+            dashboardConfig={dashboardConfig}
             onAddProduct={handleAddProduct}
             onDeleteProduct={handleDeleteProduct}
             sales={salesHistory}
@@ -2617,6 +2723,14 @@ export default function App() {
           />
         </React.Suspense>
       )}
+
+      {/* Packaging Selector Modal */}
+      <PackagingSelectModal
+        isOpen={!!selectedProductForPackaging}
+        onClose={() => setSelectedProductForPackaging(null)}
+        product={selectedProductForPackaging}
+        onSelectPackaging={handleAddToCart}
+      />
     </div>
   );
 }

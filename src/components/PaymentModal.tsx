@@ -6,6 +6,7 @@ import { useAlert } from '../context/AlertContext';
 import { getCustomerDebt } from '../lib/customerDebt';
 import { firestoreService } from '../lib/firebase';
 import { ReceiptTemplate } from './ReceiptTemplate';
+import { formatWhatsAppPhone } from '../lib/whatsapp';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -24,6 +25,8 @@ interface PaymentModalProps {
   creditNotes?: CreditNote[];
   onUpdateCreditNote?: (note: CreditNote) => void;
   dashboardConfig?: DashboardConfig;
+  initialCustomerId?: string;
+  onSelectCustomer?: (customerId: string) => void;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -43,12 +46,32 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   creditNotes = [],
   onUpdateCreditNote,
   dashboardConfig,
+  initialCustomerId,
+  onSelectCustomer,
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(initialCustomerId || '');
   const [amountPaidStr, setAmountPaidStr] = useState<string>('');
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialCustomerId !== undefined) {
+        setSelectedCustomerId(initialCustomerId);
+      }
+    }
+  }, [isOpen, initialCustomerId]);
+
+  const handleCustomerChange = (cid: string) => {
+    setSelectedCustomerId(cid);
+    if (onSelectCustomer) {
+      onSelectCustomer(cid);
+    }
+    if (!cid && paymentMethod === 'credit') {
+      setPaymentMethod('cash');
+    }
+  };
   
   // Mixed payment breakdown state
   const [mixedBreakdown, setMixedBreakdown] = useState<PaymentBreakdownItem[]>([
@@ -196,7 +219,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const creditAmountToCompare = paymentMethod === 'credit' ? total : (paymentMethod === 'mixed' ? mixedCreditPart : 0);
   const newDebtValue = currentDebt + creditAmountToCompare;
-  const isCreditLimitExceeded = creditLimitValue > 0 && newDebtValue > creditLimitValue;
+  const isCreditLimitExceeded = !selectedCust?.noCreditLimit && creditLimitValue > 0 && newDebtValue > creditLimitValue;
 
   const handleAddBreakdownRow = () => {
     const currentSum = mixedBreakdown.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -351,7 +374,70 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       window.print();
     }
 
-    // 3. Close modal immediately
+    // 3. WhatsApp notification check for credit sales or mixed sales with credit component
+    const hasCreditComponent =
+      paymentMethod === 'credit' ||
+      (paymentMethod === 'mixed' && mixedBreakdown.some(r => r.method === 'credit' && (Number(r.amount) || 0) > 0));
+
+    if (hasCreditComponent && selectedCust && selectedCust.phone && selectedCust.phone.trim()) {
+      const formattedPhone = formatWhatsAppPhone(selectedCust.phone);
+
+      if (formattedPhone) {
+        const confirmSend = await showConfirm(
+          '¿Enviar factura por WhatsApp?',
+          `¿Desea enviar la factura por WhatsApp a ${selectedCust.name}?`,
+          'Sí, enviar',
+          'No'
+        );
+
+        if (confirmSend) {
+          const updatedDebt = getCustomerDebt(
+            selectedCust.id,
+            [saleData, ...sales],
+            customerPayments || [],
+            customers || [],
+            customerRefunds || []
+          );
+
+          const creditAmount = paymentMethod === 'credit'
+            ? total
+            : mixedBreakdown
+                .filter(r => r.method === 'credit')
+                .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+          const itemsText = cartItems
+            .map(item => {
+              const name = item.selectedPackaging
+                ? `${item.product.name} (${item.selectedPackaging.name})`
+                : item.product.name;
+              const lineTotal = (item.quantity * item.product.price).toFixed(2);
+              return `• ${item.quantity}x ${name} (RD$ ${item.product.price.toFixed(2)}) = RD$ ${lineTotal}`;
+            })
+            .join('\n');
+
+          const storeName = storeIdentity?.name || 'Punto de Venta';
+
+          const message =
+            `📄 *FACTURA DE VENTA A CRÉDITO*\n` +
+            `*${storeName}*\n\n` +
+            `👤 *Cliente:* ${selectedCust.name}\n` +
+            `🏷️ *Ticket:* #${saleData.ticketNumber}\n` +
+            `📅 *Fecha:* ${saleData.date}\n\n` +
+            `----------------------------------\n` +
+            `*Detalle de Productos:*\n${itemsText}\n` +
+            `----------------------------------\n` +
+            `💰 *Total Compra:* RD$ ${saleData.total.toFixed(2)}\n` +
+            `📌 *Monto a Crédito:* RD$ ${creditAmount.toFixed(2)}\n` +
+            `💳 *Saldo Pendiente Total:* RD$ ${updatedDebt.toFixed(2)}\n\n` +
+            `¡Gracias por su preferencia!`;
+
+          const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+          window.open(whatsappUrl, '_blank');
+        }
+      }
+    }
+
+    // 4. Close modal
     onClose();
   };
 
@@ -438,12 +524,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     </label>
                     {selectedCustomerId && (
                       <button
-                        onClick={() => {
-                          setSelectedCustomerId('');
-                          if (paymentMethod === 'credit') {
-                            setPaymentMethod('cash');
-                          }
-                        }}
+                        onClick={() => handleCustomerChange('')}
                         className="text-xs text-rose-500 font-extrabold hover:underline cursor-pointer"
                       >
                         Remover Cliente
@@ -452,13 +533,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   </div>
                   <select
                     value={selectedCustomerId}
-                    onChange={(e) => {
-                      const cid = e.target.value;
-                      setSelectedCustomerId(cid);
-                      if (!cid && paymentMethod === 'credit') {
-                        setPaymentMethod('cash');
-                      }
-                    }}
+                    onChange={(e) => handleCustomerChange(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-850 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">-- Sin Cliente (Público General) --</option>
@@ -468,6 +543,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       </option>
                     ))}
                   </select>
+
+                  {selectedCustomerId && (() => {
+                    const cust = customers.find(c => c.id === selectedCustomerId);
+                    const pl = cust?.priceListId ? (dashboardConfig?.clientPriceLists || []).find(p => p.id === cust.priceListId) : null;
+                    return pl ? (
+                      <div className="flex items-center gap-1.5 p-2 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-xl animate-fade-in">
+                        <span>🏷️ Lista Mayorista/Especial: {pl.name} (+{pl.profitPercent}% ganancia)</span>
+                      </div>
+                    ) : null;
+                  })()}
 
                   {paymentMethod === 'credit' && selectedCustomerId && isCreditLimitExceeded && (
                     <div id="credit-limit-warning" className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-xl space-y-1 animate-fade-in">

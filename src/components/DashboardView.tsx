@@ -4,6 +4,7 @@ import { Product, Sale, Customer, CustomerPayment, Employee, Closure, Movement, 
 import { getCustomerDebt } from '../lib/customerDebt';
 import { getPayableBalance, getTotalPayablesBalance } from '../lib/payableDebt';
 import { getNextBusinessDay } from '../lib/businessDays';
+import { isProductBelowTargetProfit } from '../lib/money';
 import { 
   ArrowLeft, 
   ChevronLeft, 
@@ -68,6 +69,7 @@ import { getEmployeePermissions } from '../lib/permissions';
 import { firestoreService } from '../lib/firebase';
 const PayablesView = React.lazy(() => import('./PayablesView').then(m => ({ default: m.PayablesView })));
 const ReturnsView = React.lazy(() => import('./ReturnsView').then(m => ({ default: m.ReturnsView })));
+import { ExpensesView } from './ExpensesView';
 
 interface DashboardViewProps {
   isOpen: boolean;
@@ -94,7 +96,7 @@ interface DashboardViewProps {
   creditNotes?: CreditNote[];
 }
 
-type DashboardTab = 'resumen' | 'ventas' | 'creditos' | 'cuentas_pagar' | 'bancos' | 'inventario' | 'devoluciones' | 'notas_credito' | 'estado_resultados' | 'empleados';
+type DashboardTab = 'resumen' | 'ventas' | 'creditos' | 'cuentas_pagar' | 'bancos' | 'inventario' | 'devoluciones' | 'notas_credito' | 'estado_resultados' | 'empleados' | 'egresos';
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   isOpen,
@@ -296,6 +298,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         const empExpenses = movements.filter(m => {
           if (m.type !== 'out') return false;
+          const source = m.source ?? 'shift';
+          if (source !== 'shift') return false;
           if (m.employeeId !== emp.id) return false;
           const mTime = new Date(m.createdAt || m.date).getTime();
           return mTime > lastClosureTime;
@@ -666,9 +670,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return acc;
     }, 0);
 
-    // Reste los egresos en efectivo que ocurrieron ANTES de un corte
+    // Reste los egresos en efectivo que ocurrieron ANTES de un corte (o egresos directos de dashboard que restan de inmediato)
     const cashExpenses = movements.filter(m => m.type === 'out' && m.paymentMethod === 'cash');
     const closedCashExpenses = cashExpenses.filter(expense => {
+      const source = expense.source ?? 'shift';
+      if (source === 'dashboard') return true;
+
       const employeeId = expense.employeeId;
       if (!employeeId) return true;
 
@@ -873,6 +880,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     const cashExpenses = movements.filter(m => m.type === 'out' && m.paymentMethod === 'cash');
     const closedCashExpenses = cashExpenses.filter(expense => {
+      const source = expense.source ?? 'shift';
+      if (source === 'dashboard') return true;
+
       const employeeId = expense.employeeId;
       if (!employeeId) return true;
 
@@ -1060,6 +1070,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [payables, payablePayments]);
 
   const [showAllPayablesAlerts, setShowAllPayablesAlerts] = useState(false);
+
+  const [showAllLowMargin, setShowAllLowMargin] = useState(false);
+  const lowMarginAlerts = useMemo(() => {
+    const targets = (dashboardConfig as DashboardConfig)?.categoryProfitTargets;
+    return products
+      .map(p => {
+        const info = isProductBelowTargetProfit(p, targets);
+        return {
+          id: p.id,
+          name: p.name,
+          category: p.category || 'Sin categoría',
+          actualMargin: info.actualMargin,
+          targetMargin: info.targetMargin,
+          diff: info.diff,
+          isBelow: info.isBelow,
+        };
+      })
+      .filter(item => item.isBelow)
+      .sort((a, b) => b.diff - a.diff);
+  }, [products, (dashboardConfig as DashboardConfig)?.categoryProfitTargets]);
 
   // --- 3. TOP 5 MOST SOLD PRODUCTS ---
   const topProductsData = useMemo(() => {
@@ -1583,6 +1613,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {[
           { id: 'resumen', label: 'Resumen' },
           { id: 'ventas', label: 'Ventas' },
+          { id: 'egresos', label: 'Egresos' },
           { id: 'creditos', label: 'Créditos' },
           { id: 'cuentas_pagar', label: 'Cuentas por Pagar' },
           { id: 'bancos', label: 'Bancos' },
@@ -1707,7 +1738,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               {/* Card 4: Egresos */}
               <div 
-                onClick={() => onOpenExpenses?.()}
+                onClick={() => setActiveTab('egresos')}
                 className="bg-white border border-slate-200 p-4 rounded-2xl shadow-xs relative overflow-hidden flex flex-col justify-between cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all"
               >
                 <div>
@@ -2046,8 +2077,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     )}
                   </div>
 
+                  {/* Alert 4: Margin Alert */}
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+                      <span>Margen Objetivo Bajo ({lowMarginAlerts.length})</span>
+                      {lowMarginAlerts.length > 5 && (
+                        <button 
+                          onClick={() => setShowAllLowMargin(!showAllLowMargin)}
+                          className="text-[9px] font-black text-indigo-600 uppercase tracking-widest hover:underline cursor-pointer"
+                        >
+                          {showAllLowMargin ? 'Ver menos' : 'Ver todas'}
+                        </button>
+                      )}
+                    </h4>
+
+                    {lowMarginAlerts.length > 0 ? (
+                      <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                        {lowMarginAlerts.slice(0, showAllLowMargin ? undefined : 5).map(item => (
+                          <div 
+                            key={item.id} 
+                            onClick={() => onNavigateToProduct?.(item.id)}
+                            className="flex flex-col p-2 bg-amber-50 border border-amber-200/80 rounded-xl cursor-pointer hover:bg-amber-100/80 transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-800 truncate max-w-[150px]">{item.name}</span>
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900 border border-amber-300">
+                                Por debajo del margen objetivo
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between mt-1 text-[9px] text-slate-500 font-bold font-mono">
+                              <span>Cat: {item.category}</span>
+                              <span className="text-amber-800 font-black">
+                                Actual: {item.actualMargin.toFixed(1)}% / Objetivo: {item.targetMargin}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-slate-50 rounded-xl text-[10px] font-bold text-slate-400 uppercase text-center border border-dashed border-slate-200">
+                        Márgenes en meta
+                      </div>
+                    )}
+                  </div>
+
                   {/* Todo en orden state if absolutely no alerts */}
-                  {lowStockAlerts.length === 0 && overlimitCustomerAlerts.length === 0 && upcomingPayablesAlerts.length === 0 && (
+                  {lowStockAlerts.length === 0 && overlimitCustomerAlerts.length === 0 && upcomingPayablesAlerts.length === 0 && lowMarginAlerts.length === 0 && (
                     <div className="flex flex-col items-center justify-center p-6 bg-emerald-50 border border-emerald-150 rounded-3xl text-center">
                       <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center mb-2 shadow-xs">
                         <Check className="w-5 h-5 stroke-[3px]" />
@@ -2398,6 +2473,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 supplierCreditNotes={supplierCreditNotes}
               />
             </React.Suspense>
+          </div>
+        )}
+
+        {/* --- EGRESOS TAB --- */}
+        {activeTab === 'egresos' && (
+          <div className="max-w-7xl mx-auto h-full min-h-[500px]">
+            <ExpensesView
+              movements={movements}
+              currentEmployee={currentEmployee}
+              clerkName={currentEmployee?.name || 'Administrador'}
+              dashboardConfig={dashboardConfig}
+              employees={employees}
+            />
           </div>
         )}
 

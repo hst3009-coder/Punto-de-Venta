@@ -195,14 +195,17 @@ export const ReceiptTemplate: React.FC<ReceiptTemplateProps> = ({
                 const itemPrice = item.product.price;
                 const activeQty = isPartiallyReturned ? item.quantity - returnedQty : item.quantity;
                 const lineTotal = itemPrice * activeQty;
+                const displayName = item.selectedPackaging
+                  ? `${item.product.name} (${item.selectedPackaging.name})`
+                  : item.product.name;
 
                 return (
                   <div key={index} className="flex justify-between items-start gap-2 text-[11px]">
                     <div className="min-w-0 flex-1">
                       <div className={`truncate font-semibold ${isFullyReturned ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                        {item.product.name}
+                        {displayName}
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
+                      <div className="text-[10px] text-slate-500 font-medium mt-0.5">
                         {isPartiallyReturned ? (
                           <>
                             <span className="line-through text-slate-400 mr-1">{item.quantity}</span>
@@ -211,7 +214,7 @@ export const ReceiptTemplate: React.FC<ReceiptTemplateProps> = ({
                         ) : (
                           item.quantity
                         )}{' '}
-                        pza{item.quantity !== 1 ? 's' : ''} x RD$ {itemPrice.toFixed(2)}
+                        {item.selectedPackaging ? `empaque${item.quantity !== 1 ? 's' : ''}` : `pza${item.quantity !== 1 ? 's' : ''}`} x RD$ {itemPrice.toFixed(2)}
                       </div>
                       {isFullyReturned && (
                         <span className="text-[9px] font-bold text-rose-500 block">Devolución total</span>

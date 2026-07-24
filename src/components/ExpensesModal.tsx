@@ -103,7 +103,8 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
         date: new Date().toLocaleString('es-ES', { hour12: false }),
         createdAt: new Date().toISOString(),
         expenseType,
-        isOperational: expenseType === 'pago_factura' ? true : isOperational
+        isOperational: expenseType === 'pago_factura' ? true : isOperational,
+        source: 'shift' as const
       };
 
       await firestoreService.addDoc('movements', expenseData);
@@ -148,7 +149,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
           initial={{ scale: 0.95, opacity: 0, y: 15 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 15 }}
-          className="relative bg-white w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100"
+          className={`relative bg-white w-full ${recentExpenses.length > 0 ? 'max-w-5xl' : 'max-w-xl'} h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100 transition-all`}
         >
           {/* Header */}
           <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-slate-50/50">
@@ -173,7 +174,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
           <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
             
             {/* Left Hand: Registration Form */}
-            <div className="lg:col-span-5 p-6 overflow-y-auto flex flex-col justify-between">
+            <div className={`${recentExpenses.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'} p-6 overflow-y-auto flex flex-col justify-between`}>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="bg-rose-50/50 border border-rose-100/80 rounded-2xl p-3.5 flex gap-2.5">
                   <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
@@ -359,22 +360,14 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
             </div>
 
             {/* Right Hand: Recent History */}
-            <div className="lg:col-span-7 p-6 overflow-hidden flex flex-col h-full bg-slate-50/30">
-              <div className="flex items-center gap-1.5 mb-4 shrink-0">
-                <History className="w-4 h-4 text-slate-400" />
-                <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Historial de Egresos Recientes</h4>
-              </div>
+            {recentExpenses.length > 0 && (
+              <div className="lg:col-span-7 p-6 overflow-hidden flex flex-col h-full bg-slate-50/30">
+                <div className="flex items-center gap-1.5 mb-4 shrink-0">
+                  <History className="w-4 h-4 text-slate-400" />
+                  <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Historial de Egresos Recientes</h4>
+                </div>
 
-              <div className="flex-1 overflow-y-auto pr-1">
-                {recentExpenses.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white border border-slate-100 rounded-2xl">
-                    <TrendingDown className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-sm font-bold text-slate-600">No hay egresos registrados</p>
-                    <p className="text-xs text-slate-400 max-w-xs mt-1">
-                      Los gastos y egresos que registre aparecerán listados de forma cronológica en este panel.
-                    </p>
-                  </div>
-                ) : (
+                <div className="flex-1 overflow-y-auto pr-1">
                   <div className="space-y-2">
                     {recentExpenses.map((expense) => (
                       <div 
@@ -398,7 +391,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                               <Calendar className="w-3 h-3" /> {expense.date}
                             </span>
                           </div>
-                          <p className="text-sm font-extrabold text-slate-800 truncate" title={expense.concept}>
+                          <p className="text-sm font-extrabold text-slate-800 truncate uppercase" title={expense.concept}>
                             {expense.concept}
                           </p>
                           <div className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
@@ -418,9 +411,9 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
 

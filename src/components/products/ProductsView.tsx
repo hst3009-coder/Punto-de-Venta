@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, Category, Sale, EmployeePermissions } from '../../types';
+import { Product, Category, Sale, EmployeePermissions, DashboardConfig } from '../../types';
 const CatalogTab = React.lazy(() => import('./CatalogTab').then(m => ({ default: m.CatalogTab })));
 import { ProductFormTab } from './ProductFormTab';
 import { StockAddTab } from './StockAddTab';
@@ -28,6 +28,7 @@ interface ProductsViewProps {
   onClose: () => void;
   products: Product[];
   categories: Category[];
+  dashboardConfig?: DashboardConfig;
   onAddProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   sales: Sale[];
@@ -43,6 +44,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   onClose,
   products,
   categories,
+  dashboardConfig,
   onAddProduct,
   onDeleteProduct,
   sales,
@@ -148,8 +150,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
   const handleFormSuccess = (updatedProduct: Product) => {
     onAddProduct(updatedProduct);
-    setEditingProductId(null);
-    setActiveTab('catalog');
+    if (editingProductId) {
+      setEditingProductId(null);
+      setActiveTab('catalog');
+    }
   };
 
   const handleFormCancel = () => {
@@ -229,6 +233,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
             <CatalogTab
               products={products}
               categories={categories}
+              dashboardConfig={dashboardConfig}
               onEdit={handleEditClick}
               onDeleteProduct={onDeleteProduct}
               onAddProduct={onAddProduct}
@@ -243,6 +248,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
             id={editingProductId}
             products={products}
             categories={categories}
+            dashboardConfig={dashboardConfig}
             onSuccess={handleFormSuccess}
             onCancel={handleFormCancel}
           />
@@ -251,6 +257,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         {activeTab === 'add' && (
           <StockAddTab
             products={products}
+            categories={categories}
+            dashboardConfig={dashboardConfig}
             onBatchSuccess={() => {
               // Optionally do something on successful batch restock
             }}

@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Product, Category, EmployeePermissions, Sale } from '../../types';
+import { Product, Category, EmployeePermissions, Sale, DashboardConfig } from '../../types';
 import { SupplierPicker } from '../SupplierPicker';
 import { matchesProductSearch, rankSearchResults } from '../../lib/search';
 import { getSaleTimestamp } from '../../lib/dates';
 import * as XLSX from 'xlsx';
 import { useAlert } from '../../context/AlertContext';
 import { firestoreService } from '../../lib/firebase';
-import { roundCents } from '../../lib/money';
+import { roundCents, getPreTaxAmount, isProductBelowTargetProfit } from '../../lib/money';
 const ImportWizardModal = React.lazy(() => import('./ImportWizardModal').then(m => ({ default: m.ImportWizardModal })));
 import { 
   Search, 
@@ -34,6 +34,7 @@ import {
 interface CatalogTabProps {
   products: Product[];
   categories: Category[];
+  dashboardConfig?: DashboardConfig;
   onEdit: (productId: string) => void;
   onDeleteProduct: (productId: string) => void;
   onAddProduct: (product: Product) => void;
@@ -47,6 +48,7 @@ type SortOrder = 'asc' | 'desc';
 export const CatalogTab: React.FC<CatalogTabProps> = ({
   products,
   categories,
+  dashboardConfig,
   onEdit,
   onDeleteProduct,
   onAddProduct,
@@ -334,7 +336,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
   const handleExportExcel = () => {
     try {
       const exportData = filteredProducts.map((prod) => {
-        const margin = prod.cost && prod.cost > 0 ? ((prod.price - prod.cost) / prod.cost) * 100 : 0;
+        const pricePreTax = getPreTaxAmount(prod.price, prod.taxExempt);
+        const margin = prod.cost && prod.cost > 0 ? ((pricePreTax - prod.cost) / prod.cost) * 100 : 0;
         return {
           'Código/Barras': prod.code || prod.barcode || prod.id,
           'Nombre/Producto': prod.name,
@@ -932,7 +935,13 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                 <tbody className="divide-y divide-slate-150 text-xs bg-white">
                   {sortedProducts.map((prod) => {
                     const cost = prod.cost || 0;
-                    const margin = cost > 0 ? ((prod.price - cost) / cost) * 100 : 0;
+                    const pricePreTax = getPreTaxAmount(prod.price, prod.taxExempt);
+                    const margin = cost > 0 ? ((pricePreTax - cost) / cost) * 100 : 0;
+                    const { isBelow: isMarginBelowTarget, targetMargin } = isProductBelowTargetProfit(
+                      prod,
+                      dashboardConfig?.categoryProfitTargets,
+                      categories
+                    );
                     
                     return (
                       <tr key={prod.id} className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(prod.id) ? 'bg-indigo-50/40' : ''}`}>
@@ -994,6 +1003,15 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                 >
                                   {prod.category || 'Sin categoría'}
                                 </span>
+
+                                {isMarginBelowTarget && (
+                                  <span 
+                                    className="text-[8px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-black uppercase inline-flex items-center gap-1 shadow-2xs"
+                                    title={`Margen actual (${margin.toFixed(1)}%) es 5%+ menor que el objetivo (${targetMargin}%)`}
+                                  >
+                                    ⚠️ Por debajo del margen objetivo
+                                  </span>
+                                )}
 
                                 {/* SKU Badge or Editor */}
                                 {activeEdit?.productId === prod.id && activeEdit?.field === 'sku' ? (

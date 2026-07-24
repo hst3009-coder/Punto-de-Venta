@@ -1,3 +1,11 @@
+export interface ProductPackaging {
+  id: string;
+  name: string; // ej. "Caja de 12", "Pallet de 100"
+  unitsPerPackage: number;
+  price: number; // precio de venta de ESE empaque completo
+  taxExempt?: boolean;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -18,6 +26,7 @@ export interface Product {
   expirationDate?: string;
   isKit?: boolean;
   kitComponents?: Array<{ productId: string; code: string; name: string; quantity: number; cost: number; price: number }>;
+  packagings?: ProductPackaging[];
   minStock?: number;
   taxExempt?: boolean;
 }
@@ -31,6 +40,8 @@ export interface Category {
 export interface CartItem {
   product: Product;
   quantity: number;
+  packagingId?: string;
+  selectedPackaging?: ProductPackaging;
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'qr' | 'credit' | 'mixed';
@@ -166,6 +177,12 @@ export interface TicketConfig {
   footerMessageText: string;
 }
 
+export interface ClientPriceList {
+  id: string;
+  name: string; // ej. "Mayorista", "Distribuidor"
+  profitPercent: number; // % de ganancia sobre el costo, aplicado a todos los productos
+}
+
 export interface DashboardConfig {
   id: string;
   cardFeePercent: number; // default 3.8
@@ -174,6 +191,8 @@ export interface DashboardConfig {
   paymentTypes?: PaymentTypeConfig[];
   bankAccounts?: BankAccount[];
   ticketConfig?: TicketConfig;
+  categoryProfitTargets?: Record<string, number>;
+  clientPriceLists?: ClientPriceList[];
 }
 
 export interface Closure {
@@ -209,7 +228,9 @@ export interface Customer {
   phone?: string;
   email?: string;
   creditLimit?: number;
+  noCreditLimit?: boolean;
   openingDebt?: number;
+  priceListId?: string;
   createdAt?: string;
 }
 
@@ -293,6 +314,7 @@ export interface Movement {
   concept: string;
   category: string; // e.g. "Servicios", "Renta", "Suministros", "Nómina", "Otro"
   paymentMethod: 'cash' | 'card' | 'transfer';
+  bankAccountId?: string;
   clerkName: string;
   employeeId?: string;
   employeeName?: string;
@@ -300,6 +322,7 @@ export interface Movement {
   createdAt?: string;
   expenseType?: 'gasto' | 'pago_factura';
   isOperational?: boolean;
+  source?: 'shift' | 'dashboard';
 }
 
 export interface PriceList {
