@@ -4,17 +4,16 @@ import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
 import { PackagingSelectModal } from './components/PackagingSelectModal';
-// Lazy-loaded modules for code splitting and initial bundle size optimization
-const PaymentModal = React.lazy(() => import('./components/PaymentModal').then(m => ({ default: m.PaymentModal })));
-const CorteTurnoModal = React.lazy(() => import('./components/CorteTurnoModal').then(m => ({ default: m.CorteTurnoModal })));
-const TicketsModal = React.lazy(() => import('./components/TicketsModal').then(m => ({ default: m.TicketsModal })));
-const CustomersView = React.lazy(() => import('./components/CustomersView').then(m => ({ default: m.CustomersView })));
-const ExpensesModal = React.lazy(() => import('./components/ExpensesModal').then(m => ({ default: m.ExpensesModal })));
-const MenudoModal = React.lazy(() => import('./components/MenudoModal').then(m => ({ default: m.MenudoModal })));
-const AdminDrawer = React.lazy(() => import('./components/AdminDrawer').then(m => ({ default: m.AdminDrawer })));
-const DatabaseControlCenter = React.lazy(() => import('./components/DatabaseControlCenter').then(m => ({ default: m.DatabaseControlCenter })));
-const ProductsView = React.lazy(() => import('./components/products/ProductsView').then(m => ({ default: m.ProductsView })));
-const DashboardView = React.lazy(() => import('./components/DashboardView').then(m => ({ default: m.DashboardView })));
+import { PaymentModal } from './components/PaymentModal';
+import { CorteTurnoModal } from './components/CorteTurnoModal';
+import { TicketsModal } from './components/TicketsModal';
+import { CustomersView } from './components/CustomersView';
+import { ExpensesModal } from './components/ExpensesModal';
+import { MenudoModal } from './components/MenudoModal';
+import { AdminDrawer } from './components/AdminDrawer';
+import { DatabaseControlCenter } from './components/DatabaseControlCenter';
+import { ProductsView } from './components/products/ProductsView';
+import { DashboardView } from './components/DashboardView';
 import { firestoreService, authService } from './lib/firebase';
 import { roundCents, roundUpToNearestFive } from './lib/money';
 import { getSaleTimestamp } from './lib/dates';
@@ -1972,6 +1971,7 @@ export default function App() {
                       key={prod.id}
                       product={prod}
                       onAddToCart={handleAddToCart}
+                      onOpenPackagingSelector={(product) => setSelectedProductForPackaging(product)}
                       cartQuantity={currentCartQuantity(prod.id)}
                     />
                   ))}

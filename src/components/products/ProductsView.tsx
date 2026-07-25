@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Category, Sale, EmployeePermissions, DashboardConfig } from '../../types';
-const CatalogTab = React.lazy(() => import('./CatalogTab').then(m => ({ default: m.CatalogTab })));
+import { CatalogTab } from './CatalogTab';
 import { ProductFormTab } from './ProductFormTab';
 import { StockAddTab } from './StockAddTab';
-const InventoryTab = React.lazy(() => import('./InventoryTab').then(m => ({ default: m.InventoryTab })));
-const KitsTab = React.lazy(() => import('./KitsTab').then(m => ({ default: m.KitsTab })));
+import { InventoryTab } from './InventoryTab';
+import { KitsTab } from './KitsTab';
 import { DepartmentsSuppliersTab } from './DepartmentsSuppliersTab';
-const ProductSalesTab = React.lazy(() => import('./ProductSalesTab').then(m => ({ default: m.ProductSalesTab })));
+import { ProductSalesTab } from './ProductSalesTab';
 import { firestoreService } from '../../lib/firebase';
 import { deleteField } from 'firebase/firestore';
 import { 

@@ -3,11 +3,15 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { AlertProvider } from './context/AlertContext.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AlertProvider>
-      <App />
-    </AlertProvider>
+    <ErrorBoundary>
+      <AlertProvider>
+        <App />
+      </AlertProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );
+

@@ -4,22 +4,31 @@ import { Plus, AlertTriangle, Package } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
-  onAddToCart: (product: Product) => void;
+  onAddToCart: (product: Product, packaging?: any, explicitBaseUnit?: boolean) => void;
+  onOpenPackagingSelector?: (product: Product) => void;
   cartQuantity: number;
 }
 
-export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart, cartQuantity }) => {
+export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart, onOpenPackagingSelector, cartQuantity }) => {
   const isNegativeStock = product.stock <= 0;
   const hasPackagings = product.packagings && product.packagings.length > 0;
 
   return (
-    <button
+    <div
       id={`product-btn-${product.id}`}
-      onClick={() => onAddToCart(product)}
-      className={`relative flex flex-col justify-between text-left p-2.5 rounded-2xl border transition-all duration-300 select-none overflow-hidden h-52 w-full bg-white border-slate-200 hover:border-indigo-500 hover:shadow-xl hover:shadow-slate-100 active:scale-[0.98] group cursor-pointer`}
+      role="button"
+      tabIndex={0}
+      onClick={() => onAddToCart(product, undefined, true)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onAddToCart(product, undefined, true);
+        }
+      }}
+      className="relative flex flex-col justify-between text-left p-2.5 rounded-2xl border transition-all duration-300 select-none overflow-hidden h-52 w-full bg-white border-slate-200 hover:border-indigo-500 hover:shadow-xl hover:shadow-slate-100 active:scale-[0.98] group cursor-pointer"
     >
       {/* Top Section: Photo/Image or Emoji */}
-      <div className="w-full h-24 bg-slate-50 rounded-xl border border-slate-100 overflow-hidden relative flex items-center justify-center shrink-0">
+      <div className="w-full h-22 bg-slate-50 rounded-xl border border-slate-100 overflow-hidden relative flex items-center justify-center shrink-0">
         {product.imageUrl ? (
           <img
             src={product.imageUrl}
@@ -51,35 +60,45 @@ export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart,
           Stock: {product.stock}
         </span>
 
-        {/* Packaging Badge */}
+        {/* Packaging Button Icon */}
         {hasPackagings && (
-          <span className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-indigo-600/90 text-white backdrop-blur-xs z-20 shadow-2xs">
-            <Package className="w-2.5 h-2.5" />
-            {product.packagings!.length} presentaciones
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onOpenPackagingSelector) {
+                onOpenPackagingSelector(product);
+              }
+            }}
+            title={`Ver ${product.packagings!.length} presentaciones`}
+            className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-black bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white z-30 shadow-md transition-all cursor-pointer ring-2 ring-white"
+          >
+            <Package className="w-3 h-3" />
+            <span>{product.packagings!.length}</span>
+          </button>
         )}
 
         {/* Cart Quantity Badge (Float over the image) */}
         {cartQuantity > 0 && (
-          <span className="absolute top-2 right-2 flex h-6 min-w-[24px] px-1.5 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-bold ring-2 ring-white z-20">
+          <span className={`absolute ${hasPackagings ? 'bottom-2 right-2' : 'top-2 right-2'} flex h-5 min-w-[20px] px-1.5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold ring-2 ring-white z-20 shadow-xs`}>
             {cartQuantity}
           </span>
         )}
       </div>
 
       {/* Bottom Section: Info */}
-      <div className="w-full mt-2 flex-1 flex flex-col justify-between">
+      <div className="w-full mt-1.5 flex-1 flex flex-col justify-between min-h-0">
         <div>
           <h3
             title={product.name}
-            className="font-bold text-gray-800 line-clamp-1 text-xs sm:text-sm leading-tight group-hover:text-indigo-600 transition-colors uppercase"
+            className="font-bold text-gray-800 line-clamp-2 text-xs sm:text-sm leading-tight group-hover:text-indigo-600 transition-colors uppercase min-h-[2rem]"
           >
             {product.name}
           </h3>
-          <p className="text-[10px] text-gray-400 font-mono mt-0.5">#{product.barcode || product.id}</p>
+          <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">#{product.barcode || product.id}</p>
         </div>
         
-        <div className="flex justify-between items-end mt-1.5">
+        <div className="flex justify-between items-end mt-1">
           <p className="text-sm sm:text-md font-black text-gray-900">
             ${product.price.toFixed(2)}
           </p>
@@ -98,6 +117,6 @@ export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart,
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 });

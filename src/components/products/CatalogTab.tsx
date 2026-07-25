@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { useAlert } from '../../context/AlertContext';
 import { firestoreService } from '../../lib/firebase';
 import { roundCents, getPreTaxAmount, isProductBelowTargetProfit } from '../../lib/money';
-const ImportWizardModal = React.lazy(() => import('./ImportWizardModal').then(m => ({ default: m.ImportWizardModal })));
+import { ImportWizardModal } from './ImportWizardModal';
 import { 
   Search, 
   Barcode, 

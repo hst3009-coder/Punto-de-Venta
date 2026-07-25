@@ -69,8 +69,8 @@ import { getSaleTimestamp } from '../lib/dates';
 import { getPreTaxAmount, roundCents } from '../lib/money';
 import { getEmployeePermissions } from '../lib/permissions';
 import { firestoreService } from '../lib/firebase';
-const PayablesView = React.lazy(() => import('./PayablesView').then(m => ({ default: m.PayablesView })));
-const ReturnsView = React.lazy(() => import('./ReturnsView').then(m => ({ default: m.ReturnsView })));
+import { PayablesView } from './PayablesView';
+import { ReturnsView } from './ReturnsView';
 import { ExpensesView } from './ExpensesView';
 
 interface DashboardViewProps {

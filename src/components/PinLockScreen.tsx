@@ -12,9 +12,49 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({ onUnlock }) => {
   const [pin, setPin] = useState('');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [lockoutTimeLeft, setLockoutTimeLeft] = useState(0);
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    try {
+      const val = sessionStorage.getItem('pin_failed_attempts');
+      return val ? parseInt(val, 10) || 0 : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [lockoutTimeLeft, setLockoutTimeLeft] = useState<number>(() => {
+    try {
+      const untilStr = sessionStorage.getItem('pin_lockout_until');
+      if (untilStr) {
+        const until = parseInt(untilStr, 10);
+        const remaining = Math.ceil((until - Date.now()) / 1000);
+        if (remaining > 0) {
+          return remaining;
+        } else {
+          sessionStorage.removeItem('pin_lockout_until');
+          sessionStorage.removeItem('pin_failed_attempts');
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 0;
+  });
+
+  const [error, setError] = useState<string | null>(() => {
+    try {
+      const untilStr = sessionStorage.getItem('pin_lockout_until');
+      if (untilStr) {
+        const until = parseInt(untilStr, 10);
+        const remaining = Math.ceil((until - Date.now()) / 1000);
+        if (remaining > 0) {
+          return `Demasiados intentos fallidos. Teclado bloqueado por ${remaining} segundos.`;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
   const [verifying, setVerifying] = useState(false);
 
   // Load active employees
@@ -36,7 +76,34 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({ onUnlock }) => {
   useEffect(() => {
     if (lockoutTimeLeft <= 0) return;
     const interval = setInterval(() => {
-      setLockoutTimeLeft(prev => prev - 1);
+      try {
+        const untilStr = sessionStorage.getItem('pin_lockout_until');
+        if (untilStr) {
+          const until = parseInt(untilStr, 10);
+          const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+          setLockoutTimeLeft(remaining);
+          if (remaining <= 0) {
+            sessionStorage.removeItem('pin_lockout_until');
+            sessionStorage.removeItem('pin_failed_attempts');
+            setFailedAttempts(0);
+            setError(null);
+          }
+        } else {
+          setLockoutTimeLeft(prev => {
+            const next = prev - 1;
+            if (next <= 0) {
+              sessionStorage.removeItem('pin_lockout_until');
+              sessionStorage.removeItem('pin_failed_attempts');
+              setFailedAttempts(0);
+              setError(null);
+              return 0;
+            }
+            return next;
+          });
+        }
+      } catch {
+        setLockoutTimeLeft(prev => Math.max(0, prev - 1));
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, [lockoutTimeLeft]);
@@ -100,14 +167,31 @@ export const PinLockScreen: React.FC<PinLockScreenProps> = ({ onUnlock }) => {
       }
 
       if (foundEmployee) {
+        try {
+          sessionStorage.removeItem('pin_failed_attempts');
+          sessionStorage.removeItem('pin_lockout_until');
+        } catch {
+          // ignore
+        }
         setFailedAttempts(0);
         onUnlock(foundEmployee);
       } else {
         const nextFailedCount = failedAttempts + 1;
         setFailedAttempts(nextFailedCount);
+        try {
+          sessionStorage.setItem('pin_failed_attempts', String(nextFailedCount));
+        } catch {
+          // ignore
+        }
         setPin('');
         
         if (nextFailedCount >= 5) {
+          const lockoutUntil = Date.now() + 30000;
+          try {
+            sessionStorage.setItem('pin_lockout_until', String(lockoutUntil));
+          } catch {
+            // ignore
+          }
           setLockoutTimeLeft(30);
           setError('Demasiados intentos fallidos. Teclado bloqueado por 30 segundos.');
         } else {
