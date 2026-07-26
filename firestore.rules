@@ -1,12 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Reusable validation functions
+    function isValidAmount(val) {
+      return val is number && val > 0;
+    }
+
+    function isValidSaleData(data) {
+      return isValidAmount(data.total) &&
+        data.paymentMethod is string &&
+        (data.paymentMethod in ['cash', 'card', 'transfer', 'credit', 'mixed', 'qr']);
+    }
+
+    function isValidCreditNoteData(data) {
+      return data.remainingBalance is number &&
+        data.remainingBalance >= 0 &&
+        data.remainingBalance <= data.originalAmount;
+    }
+
+    function isValidPaymentData(data) {
+      return isValidAmount(data.amount);
+    }
+
+    function isValidAccountPayableData(data) {
+      return isValidAmount(data.totalAmount);
+    }
+
     // Allow read/write access to collections for authorized user email
     match /accountsPayable/{document} {
-      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow read, delete: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow create, update: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com" && isValidAccountPayableData(request.resource.data);
     }
     match /payablePayments/{document} {
-      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow read, delete: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow create, update: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com" && isValidPaymentData(request.resource.data);
     }
     match /banks/{document} {
       allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
@@ -30,13 +58,15 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /customerPayments/{document} {
-      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow read, delete: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow create, update: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com" && isValidPaymentData(request.resource.data);
     }
     match /customerRefunds/{document} {
       allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /creditNotes/{document} {
-      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow read, delete: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow create, update: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com" && isValidCreditNoteData(request.resource.data);
     }
     match /employees/{document} {
       allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
@@ -54,13 +84,15 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /sales/{document} {
-      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow read, delete: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow create, update: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com" && isValidSaleData(request.resource.data);
     }
     match /supplierReturns/{document} {
       allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
     }
     match /supplierCreditNotes/{document} {
-      allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow read, delete: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";
+      allow create, update: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com" && isValidCreditNoteData(request.resource.data);
     }
     match /suppliers/{document} {
       allow read, write: if request.auth != null && request.auth.token.email.lower() == "hst.30.09@gmail.com";

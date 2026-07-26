@@ -4,7 +4,7 @@ import { SupplierPicker } from './SupplierPicker';
 import { firestoreService } from '../lib/firebase';
 import { useAlert } from '../context/AlertContext';
 import { getPayableBalance } from '../lib/payableDebt';
-import { getEmployeePermissions } from '../lib/permissions';
+import { usePermissions } from '../hooks/usePermissions';
 import { 
   Search, 
   Plus, 
@@ -45,7 +45,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
   dashboardConfig,
 }) => {
   const { showAlert, showConfirm } = useAlert();
-  const permissions = useMemo(() => getEmployeePermissions(currentEmployee), [currentEmployee]);
+  const permissions = usePermissions(currentEmployee);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPayableId, setSelectedPayableId] = useState<string | null>(null);
   
@@ -253,7 +253,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
         type: 'set' | 'update' | 'delete';
         collectionName: string;
         id: string;
-        data?: any;
+        data?: object;
         merge?: boolean;
       }> = [];
 
@@ -763,7 +763,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                       <select
                         value={paymentMethod}
                         onChange={(e) => {
-                          setPaymentMethod(e.target.value as any);
+                          setPaymentMethod(e.target.value as 'cash' | 'card' | 'transfer' | 'credit_note');
                           setSelectedBankAccountId('');
                           setSelectedCreditNoteId('');
                         }}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote, ProductPackaging } from './types';
+import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote, ProductPackaging, PendingSyncSale, BatchOperation } from './types';
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
@@ -40,7 +40,8 @@ import { getListPrice } from './lib/priceLists';
 import { matchesProductSearch, rankSearchResults } from './lib/search';
 import { LoginScreen } from './components/LoginScreen';
 import { PinLockScreen } from './components/PinLockScreen';
-import { getEmployeePermissions, ROLE_DEFAULT_PERMISSIONS } from './lib/permissions';
+import { ROLE_DEFAULT_PERMISSIONS } from './lib/permissions';
+import { usePermissions } from './hooks/usePermissions';
 import { useAlert } from './context/AlertContext';
 import {
   Search,
@@ -66,7 +67,8 @@ import {
   LogOut,
   Package,
   LayoutDashboard,
-  TrendingDown
+  TrendingDown,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function App() {
@@ -181,7 +183,7 @@ export default function App() {
   });
 
   const clerkName = currentEmployee?.name || 'Cajero Principal';
-  const permissions = useMemo(() => getEmployeePermissions(currentEmployee), [currentEmployee]);
+  const permissions = usePermissions(currentEmployee);
   const cartListRef = useRef<HTMLDivElement>(null);
 
   const handleUnlock = (employee: Employee) => {
@@ -281,7 +283,67 @@ export default function App() {
     }
   }, []);
 
+  // --- Local Retry Queue for Failed Sales Syncs ---
+  const [pendingSyncQueue, setPendingSyncQueue] = useState<PendingSyncSale[]>(() => {
+    const saved = localStorage.getItem('pos_pending_sync_queue');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return [];
+  });
+  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
+  const pendingSyncQueueRef = useRef(pendingSyncQueue);
+  pendingSyncQueueRef.current = pendingSyncQueue;
+
+  const processPendingSyncQueue = useCallback(async () => {
+    const queue = pendingSyncQueueRef.current;
+    if (queue.length === 0) return;
+
+    setIsSyncingQueue(true);
+    const remainingQueue: PendingSyncSale[] = [];
+
+    for (const item of queue) {
+      try {
+        await firestoreService.runBatch(item.operations);
+      } catch (err) {
+        console.error(`Error al reintentar sincronizar venta ${item.id}:`, err);
+        remainingQueue.push(item);
+      }
+    }
+
+    setPendingSyncQueue(remainingQueue);
+    localStorage.setItem('pos_pending_sync_queue', JSON.stringify(remainingQueue));
+    setIsSyncingQueue(false);
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      processPendingSyncQueue();
+    };
+
+    window.addEventListener('online', handleOnline);
+
+    if (navigator.onLine && pendingSyncQueue.length > 0) {
+      processPendingSyncQueue();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [processPendingSyncQueue]);
+
+  const hasOverduePendingSync = useMemo(() => {
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    return pendingSyncQueue.some((item) => now - (item.timestamp || now) > TWENTY_FOUR_HOURS);
+  }, [pendingSyncQueue]);
+
   const [pendingSales, setPendingSales] = useState<PendingSale[]>(() => {
+
     const saved = localStorage.getItem('pos_pending_sales');
     if (saved) {
       try {
@@ -1520,54 +1582,59 @@ export default function App() {
       saveCreditNotesToStorage(updatedCreditNotes);
     }
 
-    try {
-      const operations: Array<{
-        type: 'set' | 'update' | 'delete';
-        collectionName: string;
-        id: string;
-        data?: any;
-        merge?: boolean;
-      }> = [];
+    const operations: BatchOperation[] = [];
 
-      // 1. Add operation to save sale record to Firestore
-      operations.push({
-        type: 'set',
-        collectionName: 'sales',
-        id: saleWithEmployee.id,
-        data: saleWithEmployee,
-        merge: true,
-      });
+    // 1. Add operation to save sale record to Firestore
+    operations.push({
+      type: 'set',
+      collectionName: 'sales',
+      id: saleWithEmployee.id,
+      data: saleWithEmployee,
+      merge: true,
+    });
 
-      // 2. Add operations to deduct stock from products in Firestore
-      for (const prod of updatedProducts) {
-        const original = products.find((p) => p.id === prod.id);
-        if (original && original.stock !== prod.stock) {
-          operations.push({
-            type: 'update',
-            collectionName: 'products',
-            id: prod.id,
-            data: { stock: prod.stock },
-          });
-        }
-      }
-
-      // 3. Add operations to deduct credit note balances in Firestore (atomically in the same batch)
-      for (const cnOp of creditNoteBatchOps) {
+    // 2. Add operations to deduct stock from products in Firestore
+    for (const prod of updatedProducts) {
+      const original = products.find((p) => p.id === prod.id);
+      if (original && original.stock !== prod.stock) {
         operations.push({
           type: 'update',
-          collectionName: 'creditNotes',
-          id: cnOp.id,
-          data: {
-            remainingBalance: cnOp.remainingBalance,
-            status: cnOp.status,
-          }
+          collectionName: 'products',
+          id: prod.id,
+          data: { stock: prod.stock },
         });
       }
+    }
 
+    // 3. Add operations to deduct credit note balances in Firestore (atomically in the same batch)
+    for (const cnOp of creditNoteBatchOps) {
+      operations.push({
+        type: 'update',
+        collectionName: 'creditNotes',
+        id: cnOp.id,
+        data: {
+          remainingBalance: cnOp.remainingBalance,
+          status: cnOp.status,
+        }
+      });
+    }
+
+    try {
       // Execute all operations atomically in a single batch (sales + product stock + credit notes)
       await firestoreService.runBatch(operations);
     } catch (err) {
-      console.error('Error completing sale in Firestore:', err);
+      console.error('Error completing sale in Firestore, adding to pending sync queue:', err);
+      const failedSaleItem: PendingSyncSale = {
+        id: saleWithEmployee.id,
+        timestamp: Date.now(),
+        saleData: saleWithEmployee,
+        operations,
+      };
+      setPendingSyncQueue((prev) => {
+        const updated = [...prev.filter((item) => item.id !== failedSaleItem.id), failedSaleItem];
+        localStorage.setItem('pos_pending_sync_queue', JSON.stringify(updated));
+        return updated;
+      });
     }
 
     // 3. Clear cart and set recent ticket
@@ -1704,6 +1771,43 @@ export default function App() {
 
             {/* Quick Metrics & Actions */}
             <div className="flex flex-wrap items-center gap-3">
+              {/* Pending Sync Queue Badge & Retry Button */}
+              {pendingSyncQueue.length > 0 && (
+                <div
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-xs ${
+                    hasOverduePendingSync
+                      ? 'bg-rose-50 border-rose-300 text-rose-800'
+                      : 'bg-amber-50 border-amber-300 text-amber-800'
+                  }`}
+                  title="Ventas guardadas localmente pendientes de sincronizar con Firestore"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        hasOverduePendingSync ? 'bg-rose-500 animate-ping' : 'bg-amber-500 animate-pulse'
+                      }`}
+                    />
+                    <span>
+                      {pendingSyncQueue.length} {pendingSyncQueue.length === 1 ? 'venta pendiente' : 'ventas pendientes'} de sincronizar
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={processPendingSyncQueue}
+                    disabled={isSyncingQueue}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                      hasOverduePendingSync
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    } disabled:opacity-50`}
+                    title="Reintentar sincronizar ahora"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isSyncingQueue ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingQueue ? 'Sincronizando...' : 'Reintentar ahora'}</span>
+                  </button>
+                </div>
+              )}
+
               {/* Sales Count Badge / Tickets history trigger */}
               <button
                 type="button"
@@ -1804,6 +1908,26 @@ export default function App() {
 
           </div>
         </header>
+
+        {/* Overdue pending sync warning banner (>24h) */}
+        {hasOverduePendingSync && (
+          <div className="bg-rose-600 text-white border-b border-rose-700 px-6 py-2.5 flex items-center justify-between gap-3 text-xs shrink-0 font-medium animate-fade-in shadow-inner">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0" />
+              <p>
+                <strong>¡Alerta de Conexión!</strong> Hay {pendingSyncQueue.length} {pendingSyncQueue.length === 1 ? 'venta pendiente' : 'ventas pendientes'} por sincronizar con más de 24 horas en la cola local. Por favor verifique la conexión a internet de este dispositivo.
+              </p>
+            </div>
+            <button
+              onClick={processPendingSyncQueue}
+              disabled={isSyncingQueue}
+              className="bg-white hover:bg-rose-50 text-rose-800 px-3 py-1.5 rounded-lg font-bold transition-colors shrink-0 text-[11px] shadow-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingQueue ? 'animate-spin' : ''}`} />
+              <span>{isSyncingQueue ? 'Sincronizando...' : 'Reintentar ahora'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Quota limit warning banner */}
         {dbQuotaExceeded && (

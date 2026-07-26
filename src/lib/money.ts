@@ -21,13 +21,22 @@ export function roundUpToNearestFive(value: number): number {
 }
 
 export function getCategoryProfitTarget(
-  catIdentifier: string | undefined,
+  catIdentifier: any,
   categoryProfitTargets?: Record<string, number>,
   categoriesList?: Category[]
 ): number | undefined {
   if (!categoryProfitTargets || !catIdentifier) return undefined;
 
-  const trimmed = catIdentifier.trim();
+  let str = '';
+  if (typeof catIdentifier === 'string') {
+    str = catIdentifier;
+  } else if (typeof catIdentifier === 'object' && catIdentifier !== null) {
+    str = catIdentifier.name || catIdentifier.id || '';
+  } else {
+    str = String(catIdentifier);
+  }
+
+  const trimmed = str.trim();
   if (!trimmed) return undefined;
 
   // 1. Direct key match

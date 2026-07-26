@@ -3,7 +3,7 @@ import { Product, SupplierReturn, SupplierCreditNote, AccountPayable, Employee }
 import { SupplierPicker } from './SupplierPicker';
 import { firestoreService } from '../lib/firebase';
 import { useAlert } from '../context/AlertContext';
-import { getEmployeePermissions } from '../lib/permissions';
+import { usePermissions } from '../hooks/usePermissions';
 import { 
   Package, 
   Plus, 
@@ -39,7 +39,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
   payables = [],
   currentEmployee,
 }) => {
-  const permissions = useMemo(() => getEmployeePermissions(currentEmployee), [currentEmployee]);
+  const permissions = usePermissions(currentEmployee);
   const realAlert = useAlert();
 
   // Tab View inside ReturnsView
@@ -197,7 +197,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
         type: 'set' | 'update' | 'delete';
         collectionName: string;
         id: string;
-        data?: any;
+        data?: object;
         merge?: boolean;
       }> = [];
 

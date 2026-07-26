@@ -1,6 +1,6 @@
 import { Sale } from '../types';
 
-export function getSaleTimestamp(sale: Sale): number {
+export function getSaleTimestamp(sale: { date: string; createdAt?: string }): number {
   if (sale.createdAt) {
     const time = new Date(sale.createdAt).getTime();
     if (!isNaN(time)) return time;
