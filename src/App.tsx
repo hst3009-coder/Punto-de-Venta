@@ -4,16 +4,35 @@ import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
 import { PackagingSelectModal } from './components/PackagingSelectModal';
-import { PaymentModal } from './components/PaymentModal';
-import { CorteTurnoModal } from './components/CorteTurnoModal';
-import { TicketsModal } from './components/TicketsModal';
-import { CustomersView } from './components/CustomersView';
-import { ExpensesModal } from './components/ExpensesModal';
-import { MenudoModal } from './components/MenudoModal';
-import { AdminDrawer } from './components/AdminDrawer';
-import { DatabaseControlCenter } from './components/DatabaseControlCenter';
-import { ProductsView } from './components/products/ProductsView';
-import { DashboardView } from './components/DashboardView';
+
+function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
+  return React.lazy(async () => {
+    try {
+      const m = await componentImport();
+      return { default: exportName ? m[exportName] : (m.default || m) };
+    } catch (error) {
+      console.warn('Dynamic import failed, retrying...', error);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const m = await componentImport();
+        return { default: exportName ? m[exportName] : (m.default || m) };
+      } catch (retryErr) {
+        throw retryErr;
+      }
+    }
+  });
+}
+
+const PaymentModal = lazyWithRetry(() => import('./components/PaymentModal'), 'PaymentModal');
+const CorteTurnoModal = lazyWithRetry(() => import('./components/CorteTurnoModal'), 'CorteTurnoModal');
+const TicketsModal = lazyWithRetry(() => import('./components/TicketsModal'), 'TicketsModal');
+const CustomersView = lazyWithRetry(() => import('./components/CustomersView'), 'CustomersView');
+const ExpensesModal = lazyWithRetry(() => import('./components/ExpensesModal'), 'ExpensesModal');
+const MenudoModal = lazyWithRetry(() => import('./components/MenudoModal'), 'MenudoModal');
+const AdminDrawer = lazyWithRetry(() => import('./components/AdminDrawer'), 'AdminDrawer');
+const DatabaseControlCenter = lazyWithRetry(() => import('./components/DatabaseControlCenter'), 'DatabaseControlCenter');
+const ProductsView = lazyWithRetry(() => import('./components/products/ProductsView'), 'ProductsView');
+const DashboardView = lazyWithRetry(() => import('./components/DashboardView'), 'DashboardView');
 import { firestoreService, authService } from './lib/firebase';
 import { roundCents, roundUpToNearestFive } from './lib/money';
 import { getSaleTimestamp } from './lib/dates';

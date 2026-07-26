@@ -7,7 +7,26 @@ import * as XLSX from 'xlsx';
 import { useAlert } from '../../context/AlertContext';
 import { firestoreService } from '../../lib/firebase';
 import { roundCents, getPreTaxAmount, isProductBelowTargetProfit } from '../../lib/money';
-import { ImportWizardModal } from './ImportWizardModal';
+
+function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
+  return React.lazy(async () => {
+    try {
+      const m = await componentImport();
+      return { default: exportName ? m[exportName] : (m.default || m) };
+    } catch (error) {
+      console.warn('Dynamic import failed, retrying...', error);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const m = await componentImport();
+        return { default: exportName ? m[exportName] : (m.default || m) };
+      } catch (retryErr) {
+        throw retryErr;
+      }
+    }
+  });
+}
+
+const ImportWizardModal = lazyWithRetry(() => import('./ImportWizardModal'), 'ImportWizardModal');
 import { 
   Search, 
   Barcode, 

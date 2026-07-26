@@ -69,9 +69,28 @@ import { getSaleTimestamp } from '../lib/dates';
 import { getPreTaxAmount, roundCents } from '../lib/money';
 import { getEmployeePermissions } from '../lib/permissions';
 import { firestoreService } from '../lib/firebase';
-import { PayablesView } from './PayablesView';
-import { ReturnsView } from './ReturnsView';
-import { ExpensesView } from './ExpensesView';
+
+function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
+  return React.lazy(async () => {
+    try {
+      const m = await componentImport();
+      return { default: exportName ? m[exportName] : (m.default || m) };
+    } catch (error) {
+      console.warn('Dynamic import failed, retrying...', error);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const m = await componentImport();
+        return { default: exportName ? m[exportName] : (m.default || m) };
+      } catch (retryErr) {
+        throw retryErr;
+      }
+    }
+  });
+}
+
+const PayablesView = lazyWithRetry(() => import('./PayablesView'), 'PayablesView');
+const ReturnsView = lazyWithRetry(() => import('./ReturnsView'), 'ReturnsView');
+const ExpensesView = lazyWithRetry(() => import('./ExpensesView'), 'ExpensesView');
 
 interface DashboardViewProps {
   isOpen: boolean;
@@ -2571,13 +2590,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* --- EGRESOS TAB --- */}
         {activeTab === 'egresos' && (
           <div className="max-w-7xl mx-auto h-full min-h-[500px]">
-            <ExpensesView
-              movements={movements}
-              currentEmployee={currentEmployee}
-              clerkName={currentEmployee?.name || 'Administrador'}
-              dashboardConfig={dashboardConfig}
-              employees={employees}
-            />
+            <React.Suspense fallback={
+              <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-500 font-bold">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs">Cargando Egresos...</span>
+              </div>
+            }>
+              <ExpensesView
+                movements={movements}
+                currentEmployee={currentEmployee}
+                clerkName={currentEmployee?.name || 'Administrador'}
+                dashboardConfig={dashboardConfig}
+                employees={employees}
+              />
+            </React.Suspense>
           </div>
         )}
 

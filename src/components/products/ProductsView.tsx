@@ -1,12 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Category, Sale, EmployeePermissions, DashboardConfig } from '../../types';
-import { CatalogTab } from './CatalogTab';
 import { ProductFormTab } from './ProductFormTab';
 import { StockAddTab } from './StockAddTab';
-import { InventoryTab } from './InventoryTab';
-import { KitsTab } from './KitsTab';
 import { DepartmentsSuppliersTab } from './DepartmentsSuppliersTab';
-import { ProductSalesTab } from './ProductSalesTab';
+
+function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
+  return React.lazy(async () => {
+    try {
+      const m = await componentImport();
+      return { default: exportName ? m[exportName] : (m.default || m) };
+    } catch (error) {
+      console.warn('Dynamic import failed, retrying...', error);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const m = await componentImport();
+        return { default: exportName ? m[exportName] : (m.default || m) };
+      } catch (retryErr) {
+        throw retryErr;
+      }
+    }
+  });
+}
+
+const CatalogTab = lazyWithRetry(() => import('./CatalogTab'), 'CatalogTab');
+const InventoryTab = lazyWithRetry(() => import('./InventoryTab'), 'InventoryTab');
+const KitsTab = lazyWithRetry(() => import('./KitsTab'), 'KitsTab');
+const ProductSalesTab = lazyWithRetry(() => import('./ProductSalesTab'), 'ProductSalesTab');
 import { firestoreService } from '../../lib/firebase';
 import { deleteField } from 'firebase/firestore';
 import { 
