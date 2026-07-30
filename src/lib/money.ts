@@ -1,4 +1,5 @@
 import { Category, Product } from '../types';
+import { getStringValue } from './normalize';
 
 export function roundCents(value: number): number {
   return Math.round(value * 100) / 100;
@@ -27,16 +28,7 @@ export function getCategoryProfitTarget(
 ): number | undefined {
   if (!categoryProfitTargets || !catIdentifier) return undefined;
 
-  let str = '';
-  if (typeof catIdentifier === 'string') {
-    str = catIdentifier;
-  } else if (typeof catIdentifier === 'object' && catIdentifier !== null) {
-    str = catIdentifier.name || catIdentifier.id || '';
-  } else {
-    str = String(catIdentifier);
-  }
-
-  const trimmed = str.trim();
+  const trimmed = getStringValue(catIdentifier).trim();
   if (!trimmed) return undefined;
 
   // 1. Direct key match

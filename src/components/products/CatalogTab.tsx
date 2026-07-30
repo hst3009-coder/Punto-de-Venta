@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { useAlert } from '../../context/AlertContext';
 import { firestoreService } from '../../lib/firebase';
 import { roundCents, getPreTaxAmount, isProductBelowTargetProfit } from '../../lib/money';
+import { getStringValue } from '../../lib/normalize';
 
 function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
   return React.lazy(async () => {
@@ -144,8 +145,9 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
   const categoriesList = useMemo(() => {
     const set = new Set<string>();
     products.forEach((p) => {
-      if (p.category && p.category.trim()) {
-        set.add(p.category.trim());
+      const cat = getStringValue(p.category).trim();
+      if (cat) {
+        set.add(cat);
       }
     });
     return Array.from(set).sort();
@@ -266,8 +268,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
     let initialVal = '';
     if (field === 'price') initialVal = prod.price !== undefined ? String(prod.price) : '0';
     else if (field === 'cost') initialVal = prod.cost !== undefined ? String(prod.cost) : '0';
-    else if (field === 'category') initialVal = prod.category || '';
-    else if (field === 'provider') initialVal = prod.provider || '';
+    else if (field === 'category') initialVal = getStringValue(prod.category);
+    else if (field === 'provider') initialVal = getStringValue(prod.provider);
     else if (field === 'code') initialVal = prod.code || prod.barcode || '';
     else if (field === 'sku') initialVal = prod.sku || '';
 
@@ -283,8 +285,9 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
   const filteredProducts = useMemo(() => {
     const filtered = products.filter((prod) => {
        const matchesSearch = matchesProductSearch(prod, searchQuery);
+       const prodCat = getStringValue(prod.category).trim().toLowerCase();
        const matchesCategory = selectedCategory === 'all' || 
-         (prod.category && prod.category.trim().toLowerCase() === selectedCategory.toLowerCase());
+         (prodCat !== '' && prodCat === selectedCategory.toLowerCase());
        return matchesSearch && matchesCategory;
      });
  
@@ -301,11 +304,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
         valA = a.name.toLowerCase();
         valB = b.name.toLowerCase();
       } else if (sortField === 'category') {
-        valA = (a.category || '').toLowerCase();
-        valB = (b.category || '').toLowerCase();
+        valA = getStringValue(a.category).toLowerCase();
+        valB = getStringValue(b.category).toLowerCase();
       } else if (sortField === 'provider') {
-        valA = (a.provider || '').toLowerCase();
-        valB = (b.provider || '').toLowerCase();
+        valA = getStringValue(a.provider).toLowerCase();
+        valB = getStringValue(b.provider).toLowerCase();
       } else if (sortField === 'stock') {
         valA = a.stock || 0;
         valB = b.stock || 0;
@@ -1020,7 +1023,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                   }`}
                                   title={permissions.manageProducts ? 'Clic para editar categoría' : undefined}
                                 >
-                                  {prod.category || 'Sin categoría'}
+                                  {getStringValue(prod.category, 'Sin categoría')}
                                 </span>
 
                                 {isMarginBelowTarget && (
@@ -1137,7 +1140,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                 }`}
                                 title={permissions.manageProducts ? 'Clic para editar categoría' : undefined}
                               >
-                                {prod.category || 'Sin Categoría'}
+                                {getStringValue(prod.category, 'Sin Categoría')}
                               </span>
                               {renderFeedbackIcon(prod.id, 'category')}
                             </div>
@@ -1183,8 +1186,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
                                 }`}
                                 title={permissions.manageProducts ? 'Clic para editar proveedor' : undefined}
                               >
-                                {prod.provider ? (
-                                  prod.provider
+                                {getStringValue(prod.provider) ? (
+                                  getStringValue(prod.provider)
                                 ) : (
                                   <span className="text-slate-350 italic text-[11px]">No asignado</span>
                                 )}

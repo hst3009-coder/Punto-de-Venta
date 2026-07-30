@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, Sale, Customer, CustomerPayment, Employee, Closure, Movement, AccountPayable, PayablePayment, CardDeposit, DashboardConfig, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote, AuditLogEntry } from '../types';
 import { getCustomerDebt } from '../lib/customerDebt';
 import { getPayableBalance, getTotalPayablesBalance } from '../lib/payableDebt';
 import { getNextBusinessDay } from '../lib/businessDays';
 import { isProductBelowTargetProfit } from '../lib/money';
+import { getStringValue } from '../lib/normalize';
 import { 
   ArrowLeft, 
   ChevronLeft, 
@@ -170,89 +171,96 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [queryCreditNoteCode, setQueryCreditNoteCode] = useState('');
   const [queryCreditNoteResult, setQueryCreditNoteResult] = useState<CreditNote | 'not_found' | null>(null);
 
+  const isGeneratingDepositsRef = useRef(false);
+
   // --- Auto-create CardDeposit entries for card sales ---
   useEffect(() => {
     if (!isOpen || sales.length === 0) return;
 
     const generateMissingCardDeposits = async () => {
-      // 1. Group sales by YYYY-MM-DD
-      const cardSalesByDate: Record<string, number> = {};
-      
-      sales.forEach((sale) => {
-        if (!sale.createdAt) return;
-        const dateStr = sale.createdAt.substring(0, 10); // YYYY-MM-DD
-        if (sale.paymentMethod === 'card') {
-          cardSalesByDate[dateStr] = (cardSalesByDate[dateStr] || 0) + sale.total;
-        } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
-          const cardAmount = sale.paymentBreakdown
-            .filter(b => b.method === 'card')
-            .reduce((sum, b) => sum + b.amount, 0);
-          if (cardAmount > 0) {
-            cardSalesByDate[dateStr] = (cardSalesByDate[dateStr] || 0) + cardAmount;
-          }
-        }
-      });
-
-      // Operations array for batch
-      const ops: any[] = [];
-
-      // 2. Process each date we have card sales for
-      Object.entries(cardSalesByDate).forEach(([dateStr, calculatedGross]) => {
-        const depositsForDate = cardDeposits.filter((d) => d.batchDate === dateStr);
-
-        if (depositsForDate.length === 0) {
-          // Create new CardDeposit
-          const feePercent = dashboardConfig?.cardFeePercent ?? 3.8;
-          const netAmount = roundCents(calculatedGross * (1 - feePercent / 100));
-          
-          const parsedDate = new Date(dateStr + 'T00:00:00');
-          const expectedDepositDateDate = getNextBusinessDay(parsedDate, dashboardConfig?.holidays ?? []);
-          const expectedDepositDate = format(expectedDepositDateDate, 'yyyy-MM-dd');
-          
-          const newDeposit: CardDeposit = {
-            id: `deposit_${dateStr}_${Date.now()}`,
-            batchDate: dateStr,
-            expectedDepositDate,
-            grossAmount: calculatedGross,
-            feePercent,
-            netAmount,
-            status: 'pending',
-            createdAt: new Date().toISOString()
-          };
-
-          ops.push({
-            type: 'set' as const,
-            collectionName: 'cardDeposits',
-            id: newDeposit.id,
-            data: newDeposit
-          });
-        } else {
-          // Update any existing 'pending' deposits if the gross amount has changed
-          depositsForDate.forEach((deposit) => {
-            if (deposit.status === 'pending' && deposit.grossAmount !== calculatedGross) {
-              const newNetAmount = roundCents(calculatedGross * (1 - deposit.feePercent / 100));
-              
-              ops.push({
-                type: 'update' as const,
-                collectionName: 'cardDeposits',
-                id: deposit.id,
-                data: {
-                  grossAmount: calculatedGross,
-                  netAmount: newNetAmount
-                }
-              });
-            }
-          });
-        }
-      });
-
-      if (ops.length === 0) return;
+      if (isGeneratingDepositsRef.current) return;
+      isGeneratingDepositsRef.current = true;
 
       try {
+        // 1. Group sales by YYYY-MM-DD
+        const cardSalesByDate: Record<string, number> = {};
+        
+        sales.forEach((sale) => {
+          if (!sale.createdAt) return;
+          const dateStr = sale.createdAt.substring(0, 10); // YYYY-MM-DD
+          if (sale.paymentMethod === 'card') {
+            cardSalesByDate[dateStr] = (cardSalesByDate[dateStr] || 0) + sale.total;
+          } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+            const cardAmount = sale.paymentBreakdown
+              .filter(b => b.method === 'card')
+              .reduce((sum, b) => sum + b.amount, 0);
+            if (cardAmount > 0) {
+              cardSalesByDate[dateStr] = (cardSalesByDate[dateStr] || 0) + cardAmount;
+            }
+          }
+        });
+
+        // Operations array for batch
+        const ops: any[] = [];
+
+        // 2. Process each date we have card sales for
+        Object.entries(cardSalesByDate).forEach(([dateStr, calculatedGross]) => {
+          const depositsForDate = cardDeposits.filter((d) => d.batchDate === dateStr);
+
+          if (depositsForDate.length === 0) {
+            // Create new CardDeposit
+            const feePercent = dashboardConfig?.cardFeePercent ?? 3.8;
+            const netAmount = roundCents(calculatedGross * (1 - feePercent / 100));
+            
+            const parsedDate = new Date(dateStr + 'T00:00:00');
+            const expectedDepositDateDate = getNextBusinessDay(parsedDate, dashboardConfig?.holidays ?? []);
+            const expectedDepositDate = format(expectedDepositDateDate, 'yyyy-MM-dd');
+            
+            const newDeposit: CardDeposit = {
+              id: `deposit_${dateStr}_${Date.now()}`,
+              batchDate: dateStr,
+              expectedDepositDate,
+              grossAmount: calculatedGross,
+              feePercent,
+              netAmount,
+              status: 'pending',
+              createdAt: new Date().toISOString()
+            };
+
+            ops.push({
+              type: 'set' as const,
+              collectionName: 'cardDeposits',
+              id: newDeposit.id,
+              data: newDeposit
+            });
+          } else {
+            // Update any existing 'pending' deposits if the gross amount has changed
+            depositsForDate.forEach((deposit) => {
+              if (deposit.status === 'pending' && deposit.grossAmount !== calculatedGross) {
+                const newNetAmount = roundCents(calculatedGross * (1 - deposit.feePercent / 100));
+                
+                ops.push({
+                  type: 'update' as const,
+                  collectionName: 'cardDeposits',
+                  id: deposit.id,
+                  data: {
+                    grossAmount: calculatedGross,
+                    netAmount: newNetAmount
+                  }
+                });
+              }
+            });
+          }
+        });
+
+        if (ops.length === 0) return;
+
         await firestoreService.runBatch(ops);
         console.log(`Auto-processed ${ops.length} card deposit operations.`);
       } catch (err) {
         console.error('Error auto-processing card deposits:', err);
+      } finally {
+        isGeneratingDepositsRef.current = false;
       }
     };
 
@@ -1000,7 +1008,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     filteredSales.forEach(s => {
       if (s.paymentMethod === 'mixed' && s.paymentBreakdown && s.paymentBreakdown.length > 0) {
         s.paymentBreakdown.forEach(b => {
-          const method = typeof b.method === 'string' ? b.method : (b.method ? String((b.method as any).id || (b.method as any).name || 'cash') : 'cash');
+          const method = getStringValue(b.method, 'cash');
           const amt = Number(b.amount || 0);
           if (totals[method] !== undefined) {
             totals[method] += amt;
@@ -1009,7 +1017,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           }
         });
       } else {
-        const method = typeof s.paymentMethod === 'string' ? s.paymentMethod : (s.paymentMethod ? String((s.paymentMethod as any).id || 'cash') : 'cash');
+        const method = getStringValue(s.paymentMethod, 'cash');
         const total = Number(s.total || 0);
         totals[method] = (totals[method] || 0) + total;
       }
@@ -1050,7 +1058,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       })
       .map(p => ({
         id: String(p.id || ''),
-        name: typeof p.name === 'string' ? p.name : String((p.name as any)?.name || p.name || 'Sin nombre'),
+        name: getStringValue(p.name, 'Sin nombre'),
         stock: Number(p.stock || 0),
         minStock: p.minStock !== undefined ? Number(p.minStock) : 0
       }));
@@ -1064,7 +1072,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const exceeded = debt - limit;
         return {
           id: String(c.id || ''),
-          name: typeof c.name === 'string' ? c.name : String((c.name as any)?.name || c.name || 'Sin nombre'),
+          name: getStringValue(c.name, 'Sin nombre'),
           debt,
           limit,
           exceeded
@@ -1091,8 +1099,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         return {
           id: String(p.id || ''),
-          supplierName: typeof p.supplierName === 'string' ? p.supplierName : String((p.supplierName as any)?.name || p.supplierName || 'Sin proveedor'),
-          concept: typeof p.concept === 'string' ? p.concept : String((p.concept as any)?.name || p.concept || ''),
+          supplierName: getStringValue(p.supplierName, 'Sin proveedor'),
+          concept: getStringValue(p.concept, ''),
           balance: bal,
           dueDate: String(p.dueDate || ''),
           diffDays,
@@ -1112,11 +1120,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return products
       .map(p => {
         const info = isProductBelowTargetProfit(p, targets);
-        const catStr = typeof p.category === 'object' && p.category !== null ? (p.category as any).name || (p.category as any).id : p.category;
+        const catStr = getStringValue(p.category, 'Sin categoría');
         return {
           id: String(p.id || ''),
-          name: typeof p.name === 'string' ? p.name : String((p.name as any)?.name || p.name || 'Sin nombre'),
-          category: String(catStr || 'Sin categoría'),
+          name: getStringValue(p.name, 'Sin nombre'),
+          category: catStr,
           actualMargin: Number(info.actualMargin || 0),
           targetMargin: Number(info.targetMargin || 0),
           diff: Number(info.diff || 0),
@@ -1134,7 +1142,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       if (!s.items || !Array.isArray(s.items)) return;
       s.items.forEach(item => {
         if (!item || !item.product) return;
-        const pId = typeof item.product.id === 'string' ? item.product.id : (item.product.id ? String((item.product.id as any).id || 'unknown') : 'unknown');
+        const pId = getStringValue(item.product.id, 'unknown');
         if (!map[pId]) {
           map[pId] = { qty: 0, total: 0 };
         }
@@ -1148,7 +1156,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return Object.entries(map)
       .map(([id, stats]) => {
         const prod = products.find(p => p.id === id);
-        const prodName = prod ? (typeof prod.name === 'string' ? prod.name : String((prod.name as any)?.name || prod.name || '')) : `Producto (${id.slice(0, 5)})`;
+        const prodName = prod ? getStringValue(prod.name, '') : `Producto (${id.slice(0, 5)})`;
         return {
           id: String(id),
           name: prodName,
@@ -1176,7 +1184,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const daysLeft = Math.ceil((expDate.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
         return {
           id: String(p.id || ''),
-          name: typeof p.name === 'string' ? p.name : String((p.name as any)?.name || p.name || 'Sin nombre'),
+          name: getStringValue(p.name, 'Sin nombre'),
           expirationDate: String(p.expirationDate || ''),
           daysLeft: Number(daysLeft || 0)
         };
@@ -2602,6 +2610,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="text-[9px] font-black uppercase opacity-70 block">Diferencia</span>
                     <span className="text-sm font-black font-mono">
                       RD$ {selectedClosureModal.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl col-span-2 sm:col-span-3 flex justify-between items-center">
+                    <div>
+                      <span className="text-[9px] font-black uppercase text-emerald-800 block">Retirar de Caja</span>
+                      <span className="text-[10px] text-emerald-600 font-medium">
+                        (dejando fondo de RD$ {selectedClosureModal.initialCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })})
+                      </span>
+                    </div>
+                    <span className="text-sm font-black font-mono text-emerald-700">
+                      RD$ {(selectedClosureModal.cashToRemove ?? Math.max(0, selectedClosureModal.actualCash - selectedClosureModal.initialCash)).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>

@@ -48,9 +48,20 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
 }) => {
   const { showAlert } = useAlert();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const addQuantityInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Toast notification state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 2500);
+  }, []);
 
   // Auto focus search input when tab is opened
   useEffect(() => {
@@ -98,6 +109,60 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
     setCurrentPackagings(prod.packagings ? JSON.parse(JSON.stringify(prod.packagings)) : []);
     setPkgEdits({});
     setAppliedPkgIds(new Set());
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+
+    const cleanQuery = searchQuery.trim();
+    if (!cleanQuery) return;
+
+    // Filter products by selected category if selected
+    const candidateProducts = products.filter((prod) => {
+      return selectedCategory === 'all' || !selectedCategory || prod.category === selectedCategory;
+    });
+
+    const cleanQueryCode = cleanQuery.replace(/^0+/, '');
+
+    // 1. Search exact code/barcode/SKU/id match
+    const exactMatch = candidateProducts.find((p) => {
+      const cleanBarcode = p.barcode ? p.barcode.trim().replace(/^0+/, '') : '';
+      const cleanCode = p.code ? p.code.trim().replace(/^0+/, '') : '';
+      const cleanId = p.id ? p.id.trim().replace(/^0+/, '') : '';
+      const cleanSku = p.sku ? p.sku.trim().replace(/^0+/, '') : '';
+      return (
+        (cleanBarcode && cleanBarcode === cleanQueryCode) ||
+        (cleanCode && cleanCode === cleanQueryCode) ||
+        (cleanId && cleanId === cleanQueryCode) ||
+        (cleanSku && cleanSku === cleanQueryCode)
+      );
+    });
+
+    if (exactMatch) {
+      handleSelectProduct(exactMatch);
+      setSearchQuery('');
+      setTimeout(() => {
+        addQuantityInputRef.current?.focus();
+      }, 50);
+      return;
+    }
+
+    // 2. Search text matches if no exact code match
+    const textMatches = candidateProducts.filter((p) => matchesProductSearch(p, cleanQuery));
+
+    if (textMatches.length === 1) {
+      handleSelectProduct(textMatches[0]);
+      setSearchQuery('');
+      setTimeout(() => {
+        addQuantityInputRef.current?.focus();
+      }, 50);
+    } else if (textMatches.length === 0) {
+      setSearchQuery('');
+      showToast(`Producto no encontrado: ${cleanQuery}`);
+    } else {
+      // More than 1 match -> keep list open for manual selection or further typing
+    }
   };
 
   // Bidirectional calculations
@@ -260,6 +325,11 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
     setCurrentPackagings([]);
     setPkgEdits({});
     setAppliedPkgIds(new Set());
+
+    // Focus back on search input for fast keyboard loop
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
   };
 
   const handleRemoveStaged = (id: string) => {
@@ -360,6 +430,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                   placeholder="MAYÚSCULAS O ESCÁNER..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+                  onKeyDown={handleSearchKeyDown}
                   className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border-2 border-slate-200 focus:border-indigo-600 focus:bg-white rounded-xl text-sm font-black text-slate-800 focus:outline-none transition-all placeholder:text-slate-400 uppercase"
                 />
               </div>
@@ -470,11 +541,23 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                   Cantidad a Agregar *
                 </label>
                 <input
+                  ref={addQuantityInputRef}
                   type="number"
                   required
                   min="1"
                   value={addQuantity}
                   onChange={(e) => setAddQuantity(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const qty = parseInt(addQuantity);
+                      if (isNaN(qty) || qty <= 0) {
+                        addQuantityInputRef.current?.focus();
+                        return;
+                      }
+                      handleAddToStage(e);
+                    }
+                  }}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
               </div>
@@ -753,6 +836,14 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Floating Non-blocking Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-slate-700/60 flex items-center gap-2.5 text-xs font-bold animate-fade-in backdrop-blur-md pointer-events-none">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Product, AccountPayable } from '../types';
 import { firestoreService } from '../lib/firebase';
+import { getStringValue } from '../lib/normalize';
 import { User, ChevronDown } from 'lucide-react';
 
 interface SupplierPickerProps {
@@ -53,13 +54,15 @@ export const SupplierPicker: React.FC<SupplierPickerProps> = ({
   const suggestions = useMemo(() => {
     const set = new Set<string>();
     finalProducts.forEach(p => {
-      if (p.provider && p.provider.trim()) {
-        set.add(p.provider.trim());
+      const provider = getStringValue(p.provider).trim();
+      if (provider) {
+        set.add(provider);
       }
     });
     finalPayables.forEach(ap => {
-      if (ap.supplierName && ap.supplierName.trim()) {
-        set.add(ap.supplierName.trim());
+      const supplierName = getStringValue(ap.supplierName).trim();
+      if (supplierName) {
+        set.add(supplierName);
       }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));

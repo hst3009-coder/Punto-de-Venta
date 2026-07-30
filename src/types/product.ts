@@ -1,3 +1,8 @@
+export interface BulkTier {
+  minQuantity: number;
+  price: number;
+}
+
 export interface ProductPackaging {
   id: string;
   name: string; // ej. "Caja de 12", "Pallet de 100"
@@ -27,6 +32,7 @@ export interface Product {
   isKit?: boolean;
   kitComponents?: Array<{ productId: string; code: string; name: string; quantity: number; cost: number; price: number }>;
   packagings?: ProductPackaging[];
+  bulkPricing?: BulkTier[];
   minStock?: number;
   taxExempt?: boolean;
 }
@@ -42,6 +48,7 @@ export interface CartItem {
   quantity: number;
   packagingId?: string;
   selectedPackaging?: ProductPackaging;
+  priceOverride?: number;
 }
 
 export interface PriceList {

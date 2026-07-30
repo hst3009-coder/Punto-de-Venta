@@ -1,6 +1,6 @@
 import React from 'react';
-import { CartItem } from '../types';
-import { Plus, Minus, Trash2, Package } from 'lucide-react';
+import { CartItem, BulkTier } from '../types';
+import { Plus, Minus, Trash2, Package, Tag, Sliders } from 'lucide-react';
 
 interface CartItemRowProps {
   item: CartItem;
@@ -9,8 +9,11 @@ interface CartItemRowProps {
   onRemove: (productId: string, packagingId?: string) => void;
   isSelected: boolean;
   onSelect: () => void;
+  onOverridePrice?: (item: CartItem) => void;
   originalPrice?: number;
   priceListName?: string;
+  bulkTierApplied?: BulkTier;
+  appliedPriceType?: 'standard' | 'price_list' | 'bulk_pricing' | 'packaging' | 'price_override';
 }
 
 export const CartItemRow = React.memo<CartItemRowProps>(({
@@ -20,14 +23,33 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
   onRemove,
   isSelected,
   onSelect,
+  onOverridePrice,
   originalPrice,
   priceListName,
+  bulkTierApplied,
+  appliedPriceType,
 }) => {
   const { product, quantity, packagingId, selectedPackaging } = item;
   const subtotal = product.price * quantity;
   const isPriceAdjusted = originalPrice !== undefined && Math.abs(originalPrice - product.price) > 0.001;
   const unitsDeducted = selectedPackaging ? selectedPackaging.unitsPerPackage * quantity : quantity;
   const displayName = selectedPackaging ? `${product.name} — ${selectedPackaging.name}` : product.name;
+
+  const lastTouchRef = React.useRef<number>(0);
+
+  const handleSubtotalTouchStart = (e: React.TouchEvent) => {
+    const now = Date.now();
+    if (now - lastTouchRef.current < 350) {
+      e.stopPropagation();
+      onOverridePrice?.(item);
+    }
+    lastTouchRef.current = now;
+  };
+
+  const handleSubtotalDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onOverridePrice?.(item);
+  };
 
   return (
     <div
@@ -55,9 +77,35 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
                 Empaque ({selectedPackaging.unitsPerPackage} u/empaque)
               </span>
             )}
-            {isPriceAdjusted && !selectedPackaging && (
+
+            {appliedPriceType === 'price_override' && (
+              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                <Sliders className="w-3 h-3 text-purple-600 shrink-0" />
+                Precio ajustado
+                {originalPrice && (
+                  <span className="line-through text-slate-400 font-normal ml-0.5">
+                    ${originalPrice.toFixed(2)}
+                  </span>
+                )}
+              </span>
+            )}
+
+            {appliedPriceType === 'bulk_pricing' && bulkTierApplied && (
+              <span className="text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                <Tag className="w-3 h-3 text-amber-600 shrink-0" />
+                Precio por volumen: {bulkTierApplied.minQuantity}+ unidades
+              </span>
+            )}
+
+            {appliedPriceType === 'price_list' && (
               <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md">
-                {priceListName || 'Lista'} (Catálogo: ${originalPrice.toFixed(2)})
+                {priceListName || 'Lista'} (Catálogo: ${originalPrice?.toFixed(2)})
+              </span>
+            )}
+
+            {!appliedPriceType && isPriceAdjusted && !selectedPackaging && (
+              <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md">
+                {priceListName || 'Lista'} (Catálogo: ${originalPrice?.toFixed(2)})
               </span>
             )}
           </div>
@@ -70,7 +118,10 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
         <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
           <button
             id={`qty-dec-${product.id}`}
-            onClick={() => onDecrement(product.id, packagingId)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDecrement(product.id, packagingId);
+            }}
             className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
           >
             <Minus className="w-3.5 h-3.5" />
@@ -80,7 +131,10 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
           </span>
           <button
             id={`qty-inc-${product.id}`}
-            onClick={() => onIncrement(product.id, packagingId)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onIncrement(product.id, packagingId);
+            }}
             className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -88,13 +142,23 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
         </div>
 
         {/* Subtotal & Delete */}
-        <div className="text-right min-w-[65px]">
-          <span className="text-sm font-bold text-slate-900 block">
-            ${subtotal.toFixed(2)}
-          </span>
+        <div className="text-right min-w-[65px] flex flex-col items-end">
+          <div
+            className="select-none cursor-pointer px-1.5 py-0.5 rounded-lg hover:bg-purple-100/70 border border-transparent hover:border-purple-200 transition-all text-right group/subtotal"
+            onDoubleClick={handleSubtotalDoubleClick}
+            onTouchStart={handleSubtotalTouchStart}
+            title="Doble clic o doble toque para ajustar el precio unitario"
+          >
+            <span className="text-sm font-bold text-slate-900 block group-hover/subtotal:text-purple-700">
+              ${subtotal.toFixed(2)}
+            </span>
+          </div>
           <button
             id={`qty-del-${product.id}`}
-            onClick={() => onRemove(product.id, packagingId)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(product.id, packagingId);
+            }}
             className="text-xs text-red-500 hover:text-red-700 hover:underline mt-0.5 inline-flex items-center gap-0.5 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />

@@ -4,6 +4,7 @@ import { SupplierPicker } from './SupplierPicker';
 import { firestoreService } from '../lib/firebase';
 import { useAlert } from '../context/AlertContext';
 import { usePermissions } from '../hooks/usePermissions';
+import { getStringValue } from '../lib/normalize';
 import { 
   Package, 
   Plus, 
@@ -110,7 +111,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
   const handleSubmitReturn = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!supplierName.trim()) {
+    if (!getStringValue(supplierName).trim()) {
       await realAlert.showAlert('Proveedor requerido', 'Debe ingresar o seleccionar un proveedor.', 'warning');
       return;
     }
@@ -140,7 +141,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
     try {
       const confirmSave = await realAlert.showConfirm(
         'Confirmar Devolución',
-        `¿Está seguro de registrar la devolución de ${qty} unidad(es) de "${selectedProduct.name}" al proveedor "${supplierName}" por un valor total de costo de RD$ ${cost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}?`
+        `¿Está seguro de registrar la devolución de ${qty} unidad(es) de "${getStringValue(selectedProduct.name)}" al proveedor "${getStringValue(supplierName)}" por un valor total de costo de RD$ ${cost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}?`
       );
       if (!confirmSave) return;
 
@@ -156,11 +157,11 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
       ]);
 
       const returnDoc: Omit<SupplierReturn, 'id'> = {
-        supplierName: supplierName.trim(),
+        supplierName: getStringValue(supplierName).trim(),
         productId: selectedProduct.id,
-        productName: selectedProduct.name,
+        productName: getStringValue(selectedProduct.name),
         quantity: qty,
-        reason: reason.trim() || 'Sin motivo especificado',
+        reason: getStringValue(reason).trim() || 'Sin motivo especificado',
         cost: cost,
         status: 'pending',
         date: new Date().toISOString().split('T')[0],
@@ -205,10 +206,10 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
         const creditNoteId = crypto.randomUUID();
         const creditNoteData: SupplierCreditNote = {
           id: creditNoteId,
-          supplierName: returnToCredit.supplierName,
+          supplierName: getStringValue(returnToCredit.supplierName),
           originalAmount: returnToCredit.cost,
           remainingBalance: returnToCredit.cost,
-          reason: `Devolución de ${returnToCredit.quantity}x ${returnToCredit.productName}` + (returnToCredit.reason ? ` (${returnToCredit.reason})` : ''),
+          reason: `Devolución de ${returnToCredit.quantity}x ${getStringValue(returnToCredit.productName)}` + (getStringValue(returnToCredit.reason) ? ` (${getStringValue(returnToCredit.reason)})` : ''),
           linkedReturnId: returnToCredit.id,
           status: 'active',
           employeeId: currentEmployee?.id || '',
@@ -257,7 +258,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
   // Handle manual SupplierCreditNote creation
   const handleCreateManualCreditNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualSupplierName.trim()) {
+    if (!getStringValue(manualSupplierName).trim()) {
       await realAlert.showAlert('Error', 'Debe especificar el proveedor de la nota de crédito.', 'error');
       return;
     }
@@ -270,10 +271,10 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
     setIsSavingManualNote(true);
     try {
       const creditNoteData: Omit<SupplierCreditNote, 'id'> = {
-        supplierName: manualSupplierName.trim(),
+        supplierName: getStringValue(manualSupplierName).trim(),
         originalAmount: amt,
         remainingBalance: amt,
-        reason: manualReason.trim() || 'Nota de crédito manual',
+        reason: getStringValue(manualReason).trim() || 'Nota de crédito manual',
         status: 'active',
         employeeId: currentEmployee?.id || '',
         employeeName: currentEmployee?.name || 'Sistema',
@@ -300,9 +301,9 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
     return supplierReturns.filter(ret => {
       const matchesStatus = filterStatus === 'all' || ret.status === filterStatus;
       const matchesSearch = 
-        ret.supplierName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ret.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (ret.reason && ret.reason.toLowerCase().includes(searchQuery.toLowerCase()));
+        getStringValue(ret.supplierName).toLowerCase().includes(searchQuery.toLowerCase()) ||
+        getStringValue(ret.productName).toLowerCase().includes(searchQuery.toLowerCase()) ||
+        getStringValue(ret.reason).toLowerCase().includes(searchQuery.toLowerCase());
       return matchesStatus && matchesSearch;
     }).sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
   }, [supplierReturns, filterStatus, searchQuery]);
@@ -591,7 +592,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-black text-slate-800 uppercase">
-                          {ret.supplierName}
+                          {getStringValue(ret.supplierName)}
                         </span>
                         <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                           ret.status === 'credited'
@@ -603,12 +604,12 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                       </div>
 
                       <h4 className="text-xs font-bold text-slate-600">
-                        {ret.quantity}x {ret.productName}
+                        {ret.quantity}x {getStringValue(ret.productName)}
                       </h4>
 
-                      {ret.reason && (
+                      {getStringValue(ret.reason) && (
                         <p className="text-[10px] text-slate-500 italic">
-                          Motivo: {ret.reason}
+                          Motivo: {getStringValue(ret.reason)}
                         </p>
                       )}
 
@@ -711,10 +712,10 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="text-xs font-black text-slate-800 uppercase block">
-                          {note.supplierName}
+                          {getStringValue(note.supplierName)}
                         </span>
                         <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                          {note.reason}
+                          {getStringValue(note.reason)}
                         </p>
                       </div>
                       <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
@@ -776,9 +777,9 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
 
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">Proveedor</span>
-              <p className="text-xs font-black text-slate-800 uppercase">{returnToCredit.supplierName}</p>
+              <p className="text-xs font-black text-slate-800 uppercase">{getStringValue(returnToCredit.supplierName)}</p>
               <div className="flex justify-between items-center text-xs pt-1.5 border-t border-slate-200/60 mt-1.5">
-                <span className="text-slate-600 font-medium">{returnToCredit.quantity}x {returnToCredit.productName}</span>
+                <span className="text-slate-600 font-medium">{returnToCredit.quantity}x {getStringValue(returnToCredit.productName)}</span>
                 <span className="font-black text-indigo-600 font-mono">
                   RD$ {returnToCredit.cost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                 </span>

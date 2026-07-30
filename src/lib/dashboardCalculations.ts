@@ -4,6 +4,7 @@ import { getPreTaxAmount, roundCents, isProductBelowTargetProfit } from './money
 import { getCustomerDebt } from './customerDebt';
 import { getPayableBalance, getTotalPayablesBalance } from './payableDebt';
 export { getTotalPayablesBalance };
+import { getStringValue } from './normalize';
 import { startOfDay, endOfDay, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, addMonths, differenceInDays, format } from 'date-fns';
 
 export const spanishMonths = [
@@ -49,7 +50,9 @@ export function calculateMarginPercent(filteredSales: Sale[], products: Product[
   filteredSales.forEach(s => {
     s.items.forEach(item => {
       const prod = products.find(p => p.id === item.product.id);
-      const isGeneric = item.product.category === 'Genérico' || prod?.category === 'Genérico';
+      const itemCat = getStringValue(item.product.category);
+      const prodCat = getStringValue(prod?.category);
+      const isGeneric = itemCat === 'Genérico' || prodCat === 'Genérico';
       if (isGeneric) return;
 
       const cost = prod?.cost ?? item.product.cost ?? 0;
@@ -82,18 +85,19 @@ export function calculateCashLiquidityTotal(
       if (!isClosed) return acc;
     }
 
-    if (sale.paymentMethod === 'cash') {
+    const pm = getStringValue(sale.paymentMethod, 'cash');
+    if (pm === 'cash') {
       return acc + sale.total;
-    } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+    } else if (pm === 'mixed' && sale.paymentBreakdown) {
       const cashPart = sale.paymentBreakdown
-        .filter(b => b.method === 'cash')
+        .filter(b => getStringValue(b.method) === 'cash')
         .reduce((sum, b) => sum + b.amount, 0);
       return acc + cashPart;
     }
     return acc;
   }, 0);
 
-  const cashExpenses = movements.filter(m => m.type === 'out' && m.paymentMethod === 'cash');
+  const cashExpenses = movements.filter(m => m.type === 'out' && getStringValue(m.paymentMethod) === 'cash');
   const closedCashExpenses = cashExpenses.filter(expense => {
     const source = expense.source ?? 'shift';
     if (source === 'dashboard') return true;
@@ -111,7 +115,7 @@ export function calculateCashLiquidityTotal(
 
   const closedExpensesSum = closedCashExpenses.reduce((acc, m) => acc + m.amount, 0);
 
-  const cashRefunds = (customerRefunds || []).filter(r => r.method === 'cash');
+  const cashRefunds = (customerRefunds || []).filter(r => getStringValue(r.method) === 'cash');
   const closedCashRefunds = cashRefunds.filter(refund => {
     const employeeId = refund.employeeId;
     if (!employeeId) return true;
@@ -140,10 +144,11 @@ export function calculateBankLiquidityTotal(
   const transferSalesSum = sales
     .filter(s => !s.isCancelled)
     .reduce((acc, s) => {
-      if (s.paymentMethod === 'transfer') return acc + s.total;
-      if (s.paymentMethod === 'mixed' && s.paymentBreakdown) {
+      const pm = getStringValue(s.paymentMethod);
+      if (pm === 'transfer') return acc + s.total;
+      if (pm === 'mixed' && s.paymentBreakdown) {
         const tPart = s.paymentBreakdown
-          .filter(b => b.method === 'transfer')
+          .filter(b => getStringValue(b.method) === 'transfer')
           .reduce((sum, b) => sum + b.amount, 0);
         return acc + tPart;
       }
@@ -151,7 +156,10 @@ export function calculateBankLiquidityTotal(
     }, 0);
 
   const bankCustomerPaymentsSum = customerPayments
-    .filter(p => p.paymentMethod === 'card' || p.paymentMethod === 'transfer')
+    .filter(p => {
+      const pm = getStringValue(p.paymentMethod);
+      return pm === 'card' || pm === 'transfer';
+    })
     .reduce((acc, p) => acc + p.amount, 0);
 
   return roundCents(confirmedCardDepositsSum + transferSalesSum + bankCustomerPaymentsSum);
@@ -168,7 +176,9 @@ export function calculatePLReportData(
   filteredSales.forEach(s => {
     s.items.forEach(item => {
       const prod = products.find(p => p.id === item.product.id);
-      const isGeneric = item.product.category === 'Genérico' || prod?.category === 'Genérico';
+      const itemCat = getStringValue(item.product.category);
+      const prodCat = getStringValue(prod?.category);
+      const isGeneric = itemCat === 'Genérico' || prodCat === 'Genérico';
       
       const price = item.product.price;
       const taxExempt = item.product.taxExempt || prod?.taxExempt;

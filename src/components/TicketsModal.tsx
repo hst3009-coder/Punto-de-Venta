@@ -638,25 +638,24 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
                   )}
                 </div>
 
-                {/* Today's date badge - now interactive with embedded calendar date picker */}
-                <div className={`relative border rounded-xl px-3 py-2 flex items-center gap-1.5 shrink-0 transition-all cursor-pointer group ${
+                {/* Interactive calendar date picker */}
+                <div className={`border rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 shrink-0 transition-all ${
                   filterType === 'date'
-                    ? 'bg-indigo-50 hover:bg-indigo-150 border-indigo-100 hover:border-indigo-200 text-indigo-700'
-                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
                 }`}>
-                  <Calendar className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
-                  <span className="text-[10px] font-black tracking-tight">
-                    {filterType === 'shift' ? 'Filtro por Fecha' : formattedFilterDate}
-                  </span>
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <input
                     type="date"
                     value={selectedDateStr}
                     onChange={(e) => {
-                      setSelectedDateStr(e.target.value);
-                      setFilterType('date'); // Auto-switch to date filter on selection
+                      if (e.target.value) {
+                        setSelectedDateStr(e.target.value);
+                        setFilterType('date'); // Auto-switch to date filter on selection
+                      }
                     }}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    title="Haga clic para cambiar la fecha de filtro"
+                    className="bg-transparent text-[11px] font-bold text-slate-800 focus:outline-none cursor-pointer"
+                    title="Seleccione fecha para filtrar"
                   />
                 </div>
               </div>

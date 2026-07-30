@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product, Category, DashboardConfig, ProductPackaging } from '../../types';
+import { Product, Category, DashboardConfig, ProductPackaging, BulkTier } from '../../types';
 import { getPreTaxAmount, getCategoryProfitTarget } from '../../lib/money';
+import { getStringValue } from '../../lib/normalize';
+import { validateBulkTiers } from '../../lib/bulkPricing';
 import { SupplierPicker } from '../SupplierPicker';
-import { Check, X, Tag, Barcode, DollarSign, Percent, Folder, Plus, ShoppingBag, AlertTriangle, Sparkles, TrendingUp, Package, Trash2 } from 'lucide-react';
+import { Check, X, Tag, Barcode, DollarSign, Percent, Folder, Plus, ShoppingBag, AlertTriangle, Sparkles, TrendingUp, Package, Trash2, Layers } from 'lucide-react';
 
 interface ProductFormTabProps {
   id: string | null;
@@ -80,6 +82,12 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
   const [newPkgName, setNewPkgName] = useState('');
   const [newPkgUnits, setNewPkgUnits] = useState('');
   const [newPkgPrice, setNewPkgPrice] = useState('');
+
+  // Precios por Cantidad (Escalonados)
+  const [bulkPricing, setBulkPricing] = useState<BulkTier[]>([]);
+  const [newBulkMinQty, setNewBulkMinQty] = useState('');
+  const [newBulkPrice, setNewBulkPrice] = useState('');
+
   const [error, setError] = useState<string | null>(null);
 
   // AI Category Suggestion State
@@ -91,22 +99,23 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
     if (isEditing && id) {
       const prod = products.find((p) => p.id === id);
       if (prod) {
-        setName(prod.name || '');
+        setName(getStringValue(prod.name));
         setBarcode(prod.barcode || '');
         setCode(prod.code || '');
         setSku(prod.sku || '');
         setCost(prod.cost != null ? prod.cost.toString() : '');
         setPrice(prod.price != null ? prod.price.toString() : '');
         setProfitPercent(prod.profitPercent != null ? prod.profitPercent.toString() : '');
-        setCategory(prod.category || '');
+        setCategory(getStringValue(prod.category));
         setStock(prod.stock != null ? prod.stock.toString() : '0');
         setEmoji(prod.emoji || '📦');
         setImageUrl(prod.imageUrl || '');
         setImageType(prod.imageUrl ? 'url' : 'emoji');
-        setProvider(prod.provider || '');
+        setProvider(getStringValue(prod.provider));
         setExpirationDate(prod.expirationDate || '');
         setTaxExempt(!!prod.taxExempt);
         setPackagings(prod.packagings || []);
+        setBulkPricing(prod.bulkPricing ? [...prod.bulkPricing].sort((a, b) => a.minQuantity - b.minQuantity) : []);
       }
     } else {
       // Set defaults for new product
@@ -126,10 +135,13 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
       setExpirationDate('');
       setTaxExempt(false);
       setPackagings([]);
+      setBulkPricing([]);
     }
     setNewPkgName('');
     setNewPkgUnits('');
     setNewPkgPrice('');
+    setNewBulkMinQty('');
+    setNewBulkPrice('');
     setError(null);
   }, [id, isEditing, products, categories]);
 
@@ -273,6 +285,13 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
       return;
     }
 
+    // Validate bulk pricing tiers if configured
+    const bulkPricingError = validateBulkTiers(bulkPricing, parsedPrice);
+    if (bulkPricingError) {
+      setError(bulkPricingError);
+      return;
+    }
+
     const cleanBarcode = barcode.trim();
     const cleanCode = code.trim();
 
@@ -338,6 +357,7 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
       expirationDate: expirationDate || undefined,
       taxExempt,
       packagings: packagings.length > 0 ? packagings : undefined,
+      bulkPricing: bulkPricing.length > 0 ? [...bulkPricing].sort((a, b) => a.minQuantity - b.minQuantity) : undefined,
     };
 
     onSuccess(updatedProduct);
@@ -360,9 +380,12 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
       setExpirationDate('');
       setTaxExempt(false);
       setPackagings([]);
+      setBulkPricing([]);
       setNewPkgName('');
       setNewPkgUnits('');
       setNewPkgPrice('');
+      setNewBulkMinQty('');
+      setNewBulkPrice('');
       setError(null);
       setAiSuggestedCategory(null);
     }
@@ -948,6 +971,122 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Full Width Section: Precios por Cantidad (Escalonados) */}
+        <div className="col-span-1 md:col-span-2 p-4 bg-amber-50/50 rounded-2xl border border-amber-200/70 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-700 shrink-0" />
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Precios por Cantidad (Escalonados)</h4>
+                <p className="text-[10px] text-slate-500 font-semibold">Configura precios reducidos por volumen (ej. 6+ unidades a RD$ 90.00 c/u, 12+ unidades a RD$ 80.00 c/u). Aplica a TODAS las unidades cuando se alcance el mínimo.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Form to add a new bulk pricing tier */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white p-3 rounded-xl border border-amber-200/80">
+            <div className="sm:col-span-5">
+              <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Cantidad Mínima</label>
+              <input
+                type="number"
+                min="2"
+                placeholder="Ej. 6"
+                value={newBulkMinQty}
+                onChange={(e) => setNewBulkMinQty(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+            <div className="sm:col-span-6">
+              <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">Precio Unitario para esta cantidad ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Ej. 90.00"
+                value={newBulkPrice}
+                onChange={(e) => setNewBulkPrice(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+            <div className="sm:col-span-1 flex items-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  const minQty = parseInt(newBulkMinQty);
+                  if (isNaN(minQty) || minQty <= 1) {
+                    setError('Ingresa una cantidad mínima válida (mínimo 2 unidades)');
+                    return;
+                  }
+                  const tierPrice = parseFloat(newBulkPrice);
+                  if (isNaN(tierPrice) || tierPrice <= 0) {
+                    setError('Ingresa un precio unitario válido para la cantidad mínima');
+                    return;
+                  }
+
+                  const candidateList = [...bulkPricing, { minQuantity: minQty, price: tierPrice }].sort((a, b) => a.minQuantity - b.minQuantity);
+                  const parsedBasePrice = parseFloat(price);
+                  const currentBasePrice = !isNaN(parsedBasePrice) && parsedBasePrice > 0 ? parsedBasePrice : Infinity;
+
+                  const validationErr = validateBulkTiers(candidateList, currentBasePrice);
+                  if (validationErr) {
+                    setError(validationErr);
+                    return;
+                  }
+
+                  setBulkPricing(candidateList);
+                  setNewBulkMinQty('');
+                  setNewBulkPrice('');
+                }}
+                className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center shadow-xs"
+                title="Agregar Escalón"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* List of configured bulk pricing tiers */}
+          {bulkPricing.length === 0 ? (
+            <p className="text-xs text-slate-400 italic font-medium text-center py-2">
+              Sin precios por cantidad configurados (el producto siempre se venderá al precio normal por unidad).
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {bulkPricing.map((tier, idx) => {
+                const parsedBasePrice = parseFloat(price);
+                const discount = !isNaN(parsedBasePrice) && parsedBasePrice > tier.price ? parsedBasePrice - tier.price : null;
+                return (
+                  <div key={`${tier.minQuantity}_${idx}`} className="flex items-center justify-between bg-white border border-amber-200/80 rounded-xl px-3.5 py-2">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-amber-600" />
+                        {tier.minQuantity}+ unidades
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-600">
+                        RD$ {tier.price.toFixed(2)} / unidad
+                        {discount !== null && (
+                          <span className="text-emerald-600 font-extrabold ml-1.5">
+                            (Ahorro RD$ {discount.toFixed(2)}/u)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBulkPricing((prev) => prev.filter((_, i) => i !== idx))}
+                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Eliminar Escalón"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

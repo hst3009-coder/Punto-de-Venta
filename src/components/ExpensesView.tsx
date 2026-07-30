@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Movement, Employee, DashboardConfig } from '../types';
 import { firestoreService } from '../lib/firebase';
+import { getStringValue } from '../lib/normalize';
 import { useAlert } from '../context/AlertContext';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -145,10 +146,10 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         // Search term
         if (searchTerm.trim()) {
           const term = searchTerm.toLowerCase();
-          const conceptMatch = m.concept?.toLowerCase().includes(term);
-          const invoiceMatch = m.invoiceNumber?.toLowerCase().includes(term);
-          const catMatch = m.category?.toLowerCase().includes(term);
-          const clerkMatch = m.clerkName?.toLowerCase().includes(term) || m.employeeName?.toLowerCase().includes(term);
+          const conceptMatch = getStringValue(m.concept).toLowerCase().includes(term);
+          const invoiceMatch = getStringValue(m.invoiceNumber).toLowerCase().includes(term);
+          const catMatch = getStringValue(m.category).toLowerCase().includes(term);
+          const clerkMatch = getStringValue(m.clerkName || m.employeeName).toLowerCase().includes(term);
           const amountMatch = m.amount.toString().includes(term);
           if (!conceptMatch && !invoiceMatch && !catMatch && !clerkMatch && !amountMatch) return false;
         }
@@ -205,13 +206,13 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       return;
     }
 
-    if (!concept.trim()) {
+    if (!getStringValue(concept).trim()) {
       showAlert('Por favor ingrese un concepto para el egreso', 'error');
       return;
     }
 
     const activeCategory = category === 'Otro' ? customCategory : category;
-    if (category === 'Otro' && !customCategory.trim()) {
+    if (category === 'Otro' && !getStringValue(customCategory).trim()) {
       showAlert('Por favor especifique la categoría del egreso', 'error');
       return;
     }
@@ -226,17 +227,17 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       const expenseData = {
         type: 'out' as const,
         amount: parsedAmount,
-        concept: concept.trim(),
-        category: activeCategory.trim(),
+        concept: getStringValue(concept).trim(),
+        category: getStringValue(activeCategory).trim(),
         paymentMethod,
         bankAccountId: paymentMethod === 'transfer' ? (bankAccountId || undefined) : undefined,
-        clerkName: clerkName || currentEmployee?.name || 'Administrador',
+        clerkName: getStringValue(clerkName || currentEmployee?.name, 'Administrador'),
         employeeId: currentEmployee?.id || undefined,
-        employeeName: currentEmployee?.name || undefined,
+        employeeName: getStringValue(currentEmployee?.name) || undefined,
         date: new Date().toLocaleString('es-ES', { hour12: false }),
         createdAt: new Date().toISOString(),
         expenseType,
-        invoiceNumber: expenseType === 'pago_factura' && invoiceNumber.trim() ? invoiceNumber.trim() : undefined,
+        invoiceNumber: expenseType === 'pago_factura' && getStringValue(invoiceNumber).trim() ? getStringValue(invoiceNumber).trim() : undefined,
         isOperational: expenseType === 'pago_factura' ? true : isOperational,
         source: 'dashboard' as const
       };
@@ -546,16 +547,16 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                       {/* Concept & Category */}
                       <td className="py-3 px-4">
                         <div className="font-bold text-slate-800 max-w-xs truncate">
-                          {m.concept}
-                          {m.expenseType === 'pago_factura' && m.invoiceNumber && (
+                          {getStringValue(m.concept)}
+                          {m.expenseType === 'pago_factura' && getStringValue(m.invoiceNumber) && (
                             <span className="text-indigo-600 font-bold normal-case ml-1">
-                              — Factura #{m.invoiceNumber}
+                              — Factura #{getStringValue(m.invoiceNumber)}
                             </span>
                           )}
                         </div>
                         <div className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md mt-0.5">
                           <Tag className="w-2.5 h-2.5 text-slate-400" />
-                          <span>{m.category}</span>
+                          <span>{getStringValue(m.category)}</span>
                         </div>
                       </td>
 
@@ -617,7 +618,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
                       {/* Registered by */}
                       <td className="py-3 px-4 whitespace-nowrap text-slate-600 font-medium">
-                        {m.clerkName || m.employeeName || 'Administrador'}
+                        {getStringValue(m.clerkName || m.employeeName, 'Administrador')}
                       </td>
 
                       {/* Amount */}

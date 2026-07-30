@@ -1,6 +1,7 @@
 import React from 'react';
 import { DollarSign, AlertTriangle, AlertCircle, Check } from 'lucide-react';
 import { Product } from '../../types';
+import { getStringValue } from '../../lib/normalize';
 
 export interface ABCProduct {
   id: string;
@@ -174,8 +175,8 @@ export const InventarioTab: React.FC<InventarioTabProps> = ({
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{p.emoji}</span>
                         <div>
-                          <span className="text-xs font-black text-slate-800 block">{p.name}</span>
-                          <span className="text-[9px] text-slate-400 font-bold uppercase">{p.category}</span>
+                          <span className="text-xs font-black text-slate-800 block">{getStringValue(p.name)}</span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">{getStringValue(p.category)}</span>
                         </div>
                       </div>
                     </td>

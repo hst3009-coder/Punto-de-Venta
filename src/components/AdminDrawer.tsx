@@ -23,7 +23,8 @@ import {
   Closure,
   AuditLogEntry,
   Employee,
-  ClientPriceList
+  ClientPriceList,
+  CardDeposit
 } from '../types';
 import { firestoreService } from '../lib/firebase';
 import {
@@ -72,6 +73,7 @@ interface AdminDrawerProps {
   supplierReturns?: SupplierReturn[];
   closures?: Closure[];
   currentEmployee?: Employee;
+  cardDeposits?: CardDeposit[];
 }
 
 export const AdminDrawer: React.FC<AdminDrawerProps> = ({
@@ -97,8 +99,9 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
   supplierReturns = [],
   closures = [],
   currentEmployee,
+  cardDeposits = [],
 }) => {
-  const { showAlert } = useAlert();
+  const { showAlert, showConfirm } = useAlert();
   const [activeTab, setActiveTab] = useState<'identity' | 'dashboard' | 'database' | 'employees' | 'audit'>(
     permissions.editStoreSettings ? 'identity' : 
     (permissions.accessDatabaseTools || permissions.exportFullBackup) ? 'database' : 'employees'
@@ -134,6 +137,76 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
   const [priceListProfit, setPriceListProfit] = useState('');
   const [editingPriceListId, setEditingPriceListId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isCleaningDeposits, setIsCleaningDeposits] = useState(false);
+
+  const handleCleanupDuplicateCardDeposits = async () => {
+    if (isCleaningDeposits) return;
+    setIsCleaningDeposits(true);
+    try {
+      // Fetch latest card deposits directly from Firestore
+      const dbDeposits = await firestoreService.getCollectionDocs<CardDeposit>('cardDeposits');
+      
+      const depositsByDate: Record<string, CardDeposit[]> = {};
+      dbDeposits.forEach((dep) => {
+        if (!dep.batchDate) return;
+        if (!depositsByDate[dep.batchDate]) {
+          depositsByDate[dep.batchDate] = [];
+        }
+        depositsByDate[dep.batchDate].push(dep);
+      });
+
+      const itemsToDelete: CardDeposit[] = [];
+
+      Object.entries(depositsByDate).forEach(([_dateStr, deposits]) => {
+        if (deposits.length > 1) {
+          // Sort by createdAt ascending (oldest first)
+          const sorted = [...deposits].sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (timeA !== timeB) return timeA - timeB;
+            return a.id.localeCompare(b.id);
+          });
+
+          // Keep sorted[0] (the oldest), mark the rest for deletion
+          const duplicates = sorted.slice(1);
+          itemsToDelete.push(...duplicates);
+        }
+      });
+
+      if (itemsToDelete.length === 0) {
+        await showAlert('Sin Duplicados', 'No se encontraron depósitos de tarjeta duplicados para la misma fecha.', 'info');
+        return;
+      }
+
+      const detailsList = itemsToDelete
+        .map(item => `• Fecha Lote: ${item.batchDate} | ID: ${item.id} | Monto Bruto: RD$ ${item.grossAmount.toLocaleString('es-DO')} | Estado: ${item.status === 'confirmed' ? 'Confirmado' : 'Pendiente'}`)
+        .join('\n');
+
+      const confirmDelete = await showConfirm(
+        'Limpiar Depósitos Duplicados',
+        `Se encontraron ${itemsToDelete.length} depósitos duplicados para la misma fecha de lote.\n\nSe conservará el registro más antiguo de cada fecha y se ELIMINARÁN los siguientes duplicados:\n\n${detailsList}\n\n¿Desea eliminar estos registros de forma permanente?`,
+        'Eliminar Duplicados',
+        'Cancelar'
+      );
+
+      if (!confirmDelete) return;
+
+      for (const item of itemsToDelete) {
+        await firestoreService.deleteDoc('cardDeposits', item.id);
+      }
+
+      await showAlert(
+        'Depósitos Limpiados',
+        `Se eliminaron exitosamente ${itemsToDelete.length} depósitos duplicados.`,
+        'success'
+      );
+    } catch (err) {
+      console.error('Error al limpiar depósitos duplicados:', err);
+      await showAlert('Error', 'Ocurrió un error al intentar limpiar los depósitos duplicados.', 'error');
+    } finally {
+      setIsCleaningDeposits(false);
+    }
+  };
 
   const handleExportFullBackup = () => {
     if (isExporting) return;
@@ -1276,6 +1349,40 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
                         placeholder="ej. ¡Gracias por su compra!"
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
                       />
+                    </div>
+                  )}
+
+                  {/* Depósitos de Tarjeta: Limpieza de Duplicados */}
+                  {permissions.editStoreSettings && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
+                      <div className="flex items-center gap-2.5 pb-2 border-b border-slate-200">
+                        <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                          <Trash2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-xs">Mantenimiento de Depósitos de Tarjeta</h4>
+                          <p className="text-[10px] text-slate-500 font-medium">Detecta y elimina registros duplicados creados para la misma fecha de lote.</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCleanupDuplicateCardDeposits}
+                        disabled={isCleaningDeposits}
+                        className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs active:scale-98"
+                      >
+                        {isCleaningDeposits ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-white" />
+                            <span>Buscando Duplicados...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4" />
+                            <span>Buscar y Limpiar Depósitos Duplicados</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>

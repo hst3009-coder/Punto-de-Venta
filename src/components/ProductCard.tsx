@@ -1,6 +1,6 @@
 import React from 'react';
 import { Product } from '../types';
-import { Plus, AlertTriangle, Package } from 'lucide-react';
+import { Plus, AlertTriangle, Package, Tag } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -95,7 +95,15 @@ export const ProductCard = React.memo<ProductCardProps>(({ product, onAddToCart,
           >
             {product.name}
           </h3>
-          <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">#{product.barcode || product.id}</p>
+          <div className="flex items-center justify-between gap-1 mt-0.5">
+            <p className="text-[10px] text-gray-400 font-mono truncate">#{product.barcode || product.id}</p>
+            {product.bulkPricing && product.bulkPricing.length > 0 && (
+              <span className="text-[9px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded shrink-0 flex items-center gap-0.5" title="Precios por cantidad disponibles">
+                <Tag className="w-2.5 h-2.5 text-amber-600" />
+                Volumen
+              </span>
+            )}
+          </div>
         </div>
         
         <div className="flex justify-between items-end mt-1">

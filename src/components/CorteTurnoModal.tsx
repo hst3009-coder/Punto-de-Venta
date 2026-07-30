@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   X, 
   TrendingUp, 
@@ -56,6 +56,9 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  const [cashMismatchAlert, setCashMismatchAlert] = useState<{ oldVal: number; newVal: number } | null>(null);
+  const lastKnownExpectedCashRef = useRef<number | null>(null);
+
   // Sync initial cash from dashboardConfig when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -70,10 +73,12 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
   // React to external cash total updates from Menudo calculator
   useEffect(() => {
     if (isOpen && externalCashTotal !== null && externalCashTotal !== undefined) {
+      if (!isTouched) {
+        setIsTouched(true);
+      }
       setActualCashStr(externalCashTotal.toString());
-      setIsTouched(true);
     }
-  }, [isOpen, externalCashTotal]);
+  }, [isOpen, externalCashTotal, isTouched]);
 
   // Filter sales for today / current employee's active shift
   const todaySales = useMemo(() => {
@@ -316,10 +321,15 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
   // Cash discrepancy: Actual - Expected
   const discrepancy = actualCash - expectedCash;
 
+  // Cash to remove physically from register, leaving only the initial Cash fund
+  const cashToRemove = Math.max(0, actualCash - initialCash);
+
   // Reset touch state when modal opens
   useEffect(() => {
     if (isOpen) {
       setIsTouched(false);
+      setCashMismatchAlert(null);
+      lastKnownExpectedCashRef.current = null;
     }
   }, [isOpen]);
 
@@ -330,6 +340,22 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
     }
   }, [expectedCash, isTouched, isOpen]);
 
+  // Detect if expectedCash changes while isTouched is true
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (isTouched) {
+      if (lastKnownExpectedCashRef.current === null) {
+        lastKnownExpectedCashRef.current = expectedCash;
+      } else if (Math.abs(expectedCash - lastKnownExpectedCashRef.current) > 0.001) {
+        const oldVal = lastKnownExpectedCashRef.current;
+        const newVal = expectedCash;
+        setCashMismatchAlert({ oldVal, newVal });
+        lastKnownExpectedCashRef.current = expectedCash;
+      }
+    }
+  }, [expectedCash, isTouched, isOpen]);
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -337,6 +363,10 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
   };
 
   const handleSaveClosure = async () => {
+    if (cashMismatchAlert) {
+      return;
+    }
+
     if (!actualCashStr) {
       await showAlert(
         'Efectivo Requerido',
@@ -361,8 +391,9 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
         salesTotal: salesMetrics.total,
         expectedCash,
         actualCash,
+        cashToRemove,
         difference: discrepancy,
-        status: 'closed',
+        status: 'closed' as const,
         createdAt: new Date().toISOString()
       };
 
@@ -372,6 +403,9 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
         text: 'Corte de caja registrado exitosamente en Firestore',
         type: 'success'
       });
+
+      // Imprimir reporte de cierre automáticamente
+      window.print();
 
       // Clear actual count
       setActualCashStr('');
@@ -429,6 +463,35 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
             <h1 className="text-xl font-bold uppercase tracking-wider">Reporte de Corte de Turno</h1>
             <p className="text-xs font-mono mt-1">Cajero: {clerkName} • Fecha: {new Date().toLocaleString()}</p>
           </div>
+
+          {/* Mid-count expected cash change warning banner */}
+          <AnimatePresence>
+            {cashMismatchAlert && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-900 text-xs shadow-sm space-y-3 shrink-0 print:hidden"
+              >
+                <div className="flex items-start gap-2.5 font-bold">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    El monto esperado cambió de RD${cashMismatchAlert.oldVal.toFixed(2)} a RD${cashMismatchAlert.newVal.toFixed(2)} desde que empezaste a contar (probablemente por una venta, egreso, o devolución nueva) — verifica tu conteo físico de nuevo antes de guardar.
+                  </div>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setCashMismatchAlert(null)}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-extrabold text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Entendido, ya verifiqué
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Status feedback banner */}
           <AnimatePresence>
@@ -598,7 +661,9 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                   type="number"
                   value={actualCashStr}
                   onChange={(e) => {
-                    setIsTouched(true);
+                    if (!isTouched) {
+                      setIsTouched(true);
+                    }
                     setActualCashStr(e.target.value);
                   }}
                   className="w-full px-3 py-2 rounded-xl border-2 border-indigo-200 bg-indigo-50/20 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-extrabold placeholder:font-normal placeholder:text-slate-400"
@@ -658,6 +723,19 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                   <span className="text-slate-400 italic font-normal text-[11px]">Esperando conteo...</span>
                 )}
               </div>
+
+              {/* RETIRAR DE CAJA */}
+              <div className="mt-3 pt-3 border-t border-slate-200/80 bg-emerald-50/80 rounded-xl p-3 flex justify-between items-center text-xs">
+                <span className="font-extrabold text-emerald-950 uppercase tracking-tight">Retirar de caja:</span>
+                <div className="text-right">
+                  <span className="font-mono text-sm font-black text-emerald-700 block">
+                    RD$ {cashToRemove.toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-semibold block">
+                    (dejando fondo de RD$ {initialCash.toFixed(2)})
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -686,10 +764,10 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
 
           <button
             onClick={handleSaveClosure}
-            disabled={saving}
-            className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors ${
-              actualCashStr
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/10'
+            disabled={saving || !!cashMismatchAlert}
+            className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors ${
+              actualCashStr && !cashMismatchAlert
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/10 cursor-pointer'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >

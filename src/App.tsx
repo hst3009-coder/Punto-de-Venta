@@ -4,6 +4,7 @@ import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
 import { PackagingSelectModal } from './components/PackagingSelectModal';
+import { PriceOverrideModal } from './components/PriceOverrideModal';
 
 function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
   return React.lazy(async () => {
@@ -37,6 +38,7 @@ import { firestoreService, authService } from './lib/firebase';
 import { roundCents, roundUpToNearestFive } from './lib/money';
 import { getSaleTimestamp } from './lib/dates';
 import { getListPrice } from './lib/priceLists';
+import { getEffectiveItemInfo } from './lib/bulkPricing';
 import { matchesProductSearch, rankSearchResults } from './lib/search';
 import { LoginScreen } from './components/LoginScreen';
 import { PinLockScreen } from './components/PinLockScreen';
@@ -68,7 +70,8 @@ import {
   Package,
   LayoutDashboard,
   TrendingDown,
-  AlertTriangle
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 
 export default function App() {
@@ -78,6 +81,16 @@ export default function App() {
   const [authUser, setAuthUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // --- Live Clock State ---
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = authService.onAuthChange(async (user) => {
@@ -139,6 +152,7 @@ export default function App() {
   });
   const [selectedCartItemId, setSelectedCartItemId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [priceOverrideModalItem, setPriceOverrideModalItem] = useState<CartItem | null>(null);
   
   const [salesHistory, setSalesHistory] = useState<Sale[]>(() => {
     const saved = localStorage.getItem('pos_sales');
@@ -385,15 +399,21 @@ export default function App() {
   }, [activeCustomer, dashboardConfig?.clientPriceLists]);
 
   const effectiveCart = useMemo(() => {
-    if (!activePriceList) return cart;
     return cart.map((item) => {
-      if (item.selectedPackaging) return item;
+      const info = getEffectiveItemInfo(
+        item.product,
+        item.quantity,
+        activePriceList,
+        item.selectedPackaging,
+        item.priceOverride
+      );
       return {
         ...item,
         product: {
           ...item.product,
-          price: getListPrice(item.product, activePriceList),
+          price: info.unitPrice,
         },
+        _effectiveInfo: info,
       };
     });
   }, [cart, activePriceList]);
@@ -438,7 +458,7 @@ export default function App() {
     const newPending: PendingSale = {
       id: crypto.randomUUID(),
       name,
-      items: [...cart],
+      items: [...effectiveCart],
       total: totals.finalTotal,
       createdAt: new Date().toISOString(),
     };
@@ -1127,9 +1147,19 @@ export default function App() {
         (item) => getCartItemKey(item.product.id, item.packagingId) === targetKey
       );
 
+      const existingOverride = prevCart.find(
+        (item) => item.product.id === product.id && typeof item.priceOverride === 'number'
+      )?.priceOverride;
+
       if (existingIndex > -1) {
         return prevCart.map((item, idx) =>
-          idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
+          idx === existingIndex
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+                ...(existingOverride !== undefined ? { priceOverride: existingOverride } : {}),
+              }
+            : item
         );
       }
 
@@ -1148,11 +1178,34 @@ export default function App() {
           quantity: 1,
           packagingId: packaging?.id,
           selectedPackaging: packaging,
+          ...(existingOverride !== undefined ? { priceOverride: existingOverride } : {}),
         },
       ];
     });
     setSelectedCartItemId(getCartItemKey(product.id, packaging?.id));
     setSearchQuery(''); // Clear search query upon selection
+  }, []);
+
+  const handleApplyPriceOverride = useCallback((productId: string, newUnitPrice: number) => {
+    setCart((prevCart) =>
+      prevCart.map((item) =>
+        item.product.id === productId
+          ? { ...item, priceOverride: newUnitPrice }
+          : item
+      )
+    );
+  }, []);
+
+  const handleResetPriceOverride = useCallback((productId: string) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.product.id === productId) {
+          const { priceOverride, ...rest } = item;
+          return rest;
+        }
+        return item;
+      })
+    );
   }, []);
 
   const handleIncrementQuantity = useCallback((productId: string, packagingId?: string) => {
@@ -1436,6 +1489,16 @@ export default function App() {
     showClerkInput
   ]);
 
+  // --- Toast state for non-blocking notifications ---
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 2500);
+  }, []);
+
   // --- Barcode / Quick Search Enter Handler ---
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1462,6 +1525,9 @@ export default function App() {
       if (ranked.length > 0) {
         handleAddToCart(ranked[0]);
         setSearchQuery(''); // Reset search bar
+      } else {
+        setSearchQuery('');
+        showToast(`Producto no encontrado: ${cleanQuery}`);
       }
     }
   };
@@ -1756,7 +1822,7 @@ export default function App() {
                 )}
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="font-bold text-xl tracking-tight text-slate-800 uppercase">
                     {storeIdentity.name || 'MI NEGOCIO'}
                   </h1>
@@ -2335,15 +2401,19 @@ export default function App() {
             effectiveCart.map((item) => {
               const originalProduct = products.find(p => p.id === item.product.id) || item.product;
               const itemKey = getCartItemKey(item.product.id, item.packagingId);
+              const effInfo = (item as any)._effectiveInfo;
               return (
                 <CartItemRow
                   key={itemKey}
                   item={item}
                   originalPrice={originalProduct.price}
-                  priceListName={totals.activePriceList?.name}
+                  priceListName={effInfo?.appliedPriceListName || totals.activePriceList?.name}
+                  bulkTierApplied={effInfo?.bulkTierApplied}
+                  appliedPriceType={effInfo?.appliedType}
                   onIncrement={handleIncrementQuantity}
                   onDecrement={handleDecrementQuantity}
                   onRemove={handleRemoveFromCart}
+                  onOverridePrice={(cartItem) => setPriceOverrideModalItem(cartItem)}
                   isSelected={selectedCartItemId === itemKey}
                   onSelect={() => setSelectedCartItemId(itemKey)}
                 />
@@ -2388,7 +2458,7 @@ export default function App() {
                     const ticketNumber = `TKT-${Math.floor(100000 + Math.random() * 900000)}`;
                     const saleData: Sale = {
                       id: crypto.randomUUID(),
-                      items: [...cart],
+                      items: [...effectiveCart],
                       total: totals.finalTotal,
                       paymentMethod: 'card',
                       amountPaid: totals.finalTotal,
@@ -2474,6 +2544,22 @@ export default function App() {
         </div>
 
       </aside>
+
+      {/* --- Fixed Live Clock (Bottom Right) --- */}
+      <div className="fixed bottom-3 right-4 z-30 pointer-events-none select-none">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-white/90 backdrop-blur-md text-slate-700 border border-slate-200/90 shadow-md shadow-slate-900/5">
+          <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+          <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
+        </div>
+      </div>
+
+      {/* --- Floating Non-blocking Toast Notification --- */}
+      {toastMessage && (
+        <div className="fixed bottom-14 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-slate-700/60 flex items-center gap-2.5 text-xs font-bold animate-fade-in backdrop-blur-md pointer-events-none">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {/* --- Modals and Drawers Layouts --- */}
       
@@ -2630,6 +2716,7 @@ export default function App() {
             supplierReturns={supplierReturns}
             closures={closures}
             currentEmployee={currentEmployee}
+            cardDeposits={cardDeposits}
           />
         </React.Suspense>
       )}
@@ -2874,6 +2961,15 @@ export default function App() {
         onClose={() => setSelectedProductForPackaging(null)}
         product={selectedProductForPackaging}
         onSelectPackaging={handleAddToCart}
+      />
+
+      {/* Manual Price Override Modal */}
+      <PriceOverrideModal
+        isOpen={!!priceOverrideModalItem}
+        onClose={() => setPriceOverrideModalItem(null)}
+        item={priceOverrideModalItem}
+        onConfirm={handleApplyPriceOverride}
+        onReset={handleResetPriceOverride}
       />
     </div>
   );

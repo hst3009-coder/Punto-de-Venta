@@ -5,6 +5,7 @@ import { firestoreService } from '../lib/firebase';
 import { useAlert } from '../context/AlertContext';
 import { getPayableBalance } from '../lib/payableDebt';
 import { usePermissions } from '../hooks/usePermissions';
+import { getStringValue } from '../lib/normalize';
 import { 
   Search, 
   Plus, 
@@ -82,11 +83,11 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
   // Active credit notes for the selected payable's supplier
   const activeNotesForSupplier = useMemo(() => {
     if (!selectedPayable) return [];
-    const targetName = selectedPayable.supplierName.trim().toLowerCase();
+    const targetName = getStringValue(selectedPayable.supplierName).trim().toLowerCase();
     return supplierCreditNotes.filter(n => 
       n.status === 'active' && 
       (n.remainingBalance || 0) > 0 && 
-      n.supplierName.trim().toLowerCase() === targetName
+      getStringValue(n.supplierName).trim().toLowerCase() === targetName
     );
   }, [selectedPayable, supplierCreditNotes]);
 
@@ -119,8 +120,8 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(p => 
-        p.supplierName.toLowerCase().includes(q) || 
-        p.concept.toLowerCase().includes(q)
+        getStringValue(p.supplierName).toLowerCase().includes(q) || 
+        getStringValue(p.concept).toLowerCase().includes(q)
       );
     }
 
@@ -165,11 +166,11 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
   // Submit new payable
   const handleCreatePayable = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierName.trim()) {
+    if (!getStringValue(supplierName).trim()) {
       await showAlert('Error', 'Debe escribir o seleccionar un proveedor.', 'error');
       return;
     }
-    if (!concept.trim()) {
+    if (!getStringValue(concept).trim()) {
       await showAlert('Error', 'Debe ingresar un concepto.', 'error');
       return;
     }
@@ -185,8 +186,8 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
 
     try {
       const newPayable: Partial<AccountPayable> = {
-        supplierName: supplierName.trim(),
-        concept: concept.trim(),
+        supplierName: getStringValue(supplierName).trim(),
+        concept: getStringValue(concept).trim(),
         totalAmount: amt,
         dueDate: dueDate,
         status: 'pending',
@@ -230,7 +231,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
 
     if (paymentMethod === 'credit_note') {
       if (!selectedCreditNote) {
-        await showAlert('Sin nota de crédito', `No hay notas de crédito activas disponibles para el proveedor ${selectedPayable.supplierName}.`, 'warning');
+        await showAlert('Sin nota de crédito', `No hay notas de crédito activas disponibles para el proveedor ${getStringValue(selectedPayable.supplierName)}.`, 'warning');
         return;
       }
       if (amt > selectedCreditNote.remainingBalance) {
@@ -241,7 +242,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
 
     const confirmPayment = await showConfirm(
       'Confirmar Pago',
-      `¿Está seguro de registrar este pago de RD$ ${amt.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${paymentMethod === 'credit_note' ? 'Nota de Crédito' : paymentMethod}) por concepto de "${selectedPayable.concept}" al proveedor "${selectedPayable.supplierName}"?`
+      `¿Está seguro de registrar este pago de RD$ ${amt.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${paymentMethod === 'credit_note' ? 'Nota de Crédito' : paymentMethod}) por concepto de "${getStringValue(selectedPayable.concept)}" al proveedor "${getStringValue(selectedPayable.supplierName)}"?`
     );
 
     if (!confirmPayment) return;
@@ -314,7 +315,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
           type: 'out',
           expenseType: 'pago_factura',
           amount: amt,
-          concept: `Pago a proveedor: ${selectedPayable.supplierName}`,
+          concept: `Pago a proveedor: ${getStringValue(selectedPayable.supplierName)}`,
           category: 'Suministros',
           paymentMethod: 'cash',
           clerkName: currentEmployee?.name || 'Sistema',
@@ -423,7 +424,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                   }`}
                 >
                   <div className="flex justify-between items-start">
-                    <span className="font-black text-slate-800 uppercase text-[11px]">{note.supplierName}</span>
+                    <span className="font-black text-slate-800 uppercase text-[11px]">{getStringValue(note.supplierName)}</span>
                     <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${
                       note.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                     }`}>
@@ -546,7 +547,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-black uppercase text-slate-800">
-                          {item.supplierName}
+                          {getStringValue(item.supplierName)}
                         </span>
                         {bal > 0 ? (
                           <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${daysInfo.color}`}>
@@ -560,7 +561,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                       </div>
 
                       <p className="text-[10px] text-slate-500 font-semibold">
-                        {item.concept}
+                        {getStringValue(item.concept)}
                       </p>
 
                       <div className="text-[9px] text-slate-400 flex items-center gap-2">
@@ -678,8 +679,8 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                 <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h4 className="text-xs font-black text-slate-800 uppercase">{selectedPayable.supplierName}</h4>
-                      <p className="text-[10px] text-slate-500 font-medium">{selectedPayable.concept}</p>
+                      <h4 className="text-xs font-black text-slate-800 uppercase">{getStringValue(selectedPayable.supplierName)}</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">{getStringValue(selectedPayable.concept)}</p>
                     </div>
                     <span className="text-[9px] font-mono font-bold text-slate-500">
                       Vence: {selectedPayable.dueDate}
@@ -783,11 +784,11 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                   {paymentMethod === 'credit_note' && (
                     <div className="space-y-1.5 bg-indigo-50/70 p-2.5 border border-indigo-150 rounded-xl">
                       <label className="text-[9px] font-bold uppercase text-indigo-800 tracking-wide block">
-                        Nota de Crédito del Proveedor ({selectedPayable.supplierName})
+                        Nota de Crédito del Proveedor ({getStringValue(selectedPayable.supplierName)})
                       </label>
                       {activeNotesForSupplier.length === 0 ? (
                         <div className="text-[10px] text-amber-800 font-semibold bg-amber-50 p-2 rounded-lg border border-amber-200">
-                          ⚠️ No tienes notas de crédito activas registradas para {selectedPayable.supplierName}.
+                          ⚠️ No tienes notas de crédito activas registradas para {getStringValue(selectedPayable.supplierName)}.
                         </div>
                       ) : (
                         <div className="space-y-1">

@@ -6,6 +6,7 @@ export interface Closure {
   initialCash: number;
   expectedCash: number;
   actualCash: number;
+  cashToRemove?: number;
   salesTotal: number;
   difference: number;
   status: 'open' | 'closed';
