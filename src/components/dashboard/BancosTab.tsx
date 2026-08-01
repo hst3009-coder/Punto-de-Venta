@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Landmark, Check, X } from 'lucide-react';
 import { CardDeposit, Employee, EmployeePermissions } from '../../types';
 import { roundCents } from '../../lib/money';
@@ -7,10 +7,6 @@ import { firestoreService } from '../../lib/firebase';
 interface BancosTabProps {
   cardDeposits: CardDeposit[];
   permissions: EmployeePermissions;
-  confirmingDeposit: CardDeposit | null;
-  confirmedAmountInput: string;
-  setConfirmingDeposit: (deposit: CardDeposit | null) => void;
-  setConfirmedAmountInput: (v: string) => void;
   currentEmployee: Employee | null;
   firestoreService: typeof firestoreService;
   showAlert: (msg: string) => void;
@@ -19,14 +15,13 @@ interface BancosTabProps {
 export const BancosTab: React.FC<BancosTabProps> = ({
   cardDeposits,
   permissions,
-  confirmingDeposit,
-  confirmedAmountInput,
-  setConfirmingDeposit,
-  setConfirmedAmountInput,
   currentEmployee,
   firestoreService,
   showAlert,
 }) => {
+  const [confirmingDeposit, setConfirmingDeposit] = useState<CardDeposit | null>(null);
+  const [confirmedAmountInput, setConfirmedAmountInput] = useState<string>('');
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Top Summaries / KPIs */}

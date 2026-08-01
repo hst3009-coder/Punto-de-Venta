@@ -920,3 +920,5 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
     </div>
   );
 };
+
+export default ReturnsView;

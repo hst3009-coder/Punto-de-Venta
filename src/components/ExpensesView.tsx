@@ -906,3 +906,5 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
     </div>
   );
 };
+
+export default ExpensesView;

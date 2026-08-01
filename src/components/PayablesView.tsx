@@ -295,17 +295,16 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
         });
       }
 
-      // 3. Update status of the payable if fully paid
-      if (newBalance <= 0) {
-        operations.push({
-          type: 'update',
-          collectionName: 'accountsPayable',
-          id: selectedPayable.id,
-          data: {
-            status: 'paid'
-          }
-        });
-      }
+      // 3. Update accountsPayable (supplierName & status if fully paid)
+      operations.push({
+        type: 'update',
+        collectionName: 'accountsPayable',
+        id: selectedPayable.id,
+        data: {
+          supplierName: getStringValue(selectedPayable.supplierName).trim(),
+          ...(newBalance <= 0 ? { status: 'paid' } : {})
+        }
+      });
 
       // 4. Create Movement automatically ONLY if CASH payment
       if (paymentMethod === 'cash') {
@@ -878,3 +877,5 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
     </div>
   );
 };
+
+export default PayablesView;

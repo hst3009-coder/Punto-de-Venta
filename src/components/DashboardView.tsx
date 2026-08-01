@@ -157,8 +157,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedClosureModal, setSelectedClosureModal] = useState<Closure | null>(null);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
   const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
-  const [confirmingDeposit, setConfirmingDeposit] = useState<CardDeposit | null>(null);
-  const [confirmedAmountInput, setConfirmedAmountInput] = useState<string>('');
 
   // Credit notes tab filter states
   const [creditNoteSearch, setCreditNoteSearch] = useState('');
@@ -171,15 +169,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [queryCreditNoteCode, setQueryCreditNoteCode] = useState('');
   const [queryCreditNoteResult, setQueryCreditNoteResult] = useState<CreditNote | 'not_found' | null>(null);
 
-  const isGeneratingDepositsRef = useRef(false);
+  const isProcessingRef = useRef(false);
 
   // --- Auto-create CardDeposit entries for card sales ---
   useEffect(() => {
     if (!isOpen || sales.length === 0) return;
 
     const generateMissingCardDeposits = async () => {
-      if (isGeneratingDepositsRef.current) return;
-      isGeneratingDepositsRef.current = true;
+      if (isProcessingRef.current) return;
+      isProcessingRef.current = true;
 
       try {
         // 1. Group sales by YYYY-MM-DD
@@ -260,7 +258,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       } catch (err) {
         console.error('Error auto-processing card deposits:', err);
       } finally {
-        isGeneratingDepositsRef.current = false;
+        isProcessingRef.current = false;
       }
     };
 
@@ -1887,10 +1885,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <BancosTab
               cardDeposits={cardDeposits}
               permissions={permissions}
-              confirmingDeposit={confirmingDeposit}
-              confirmedAmountInput={confirmedAmountInput}
-              setConfirmingDeposit={setConfirmingDeposit}
-              setConfirmedAmountInput={setConfirmedAmountInput}
               currentEmployee={currentEmployee}
               firestoreService={firestoreService}
               showAlert={showAlert}
@@ -1969,108 +1963,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
 
 
-
-        {/* Deposit Confirmation Modal dialog */}
-        {confirmingDeposit && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-up m-4">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                  <Landmark className="w-4 h-4 text-indigo-600" />
-                  Confirmar Depósito Bancario
-                </h3>
-                <button
-                  onClick={() => setConfirmingDeposit(null)}
-                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-3.5">
-                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs font-semibold">
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Fecha Lote</span>
-                    <span className="text-slate-700 font-mono font-bold">{confirmingDeposit.batchDate}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Fecha Esperada</span>
-                    <span className="text-slate-700 font-mono font-bold">{confirmingDeposit.expectedDepositDate}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Monto Bruto</span>
-                    <span className="text-slate-700 font-mono">RD$ {confirmingDeposit.grossAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Comisión ({confirmingDeposit.feePercent}%)</span>
-                    <span className="text-slate-700 font-mono">RD$ {roundCents(confirmingDeposit.grossAmount * confirmingDeposit.feePercent / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 block">Monto Neto Calculado</label>
-                  <span className="text-lg font-black font-mono text-indigo-600 block">
-                    RD$ {confirmingDeposit.netAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 block">Monto Depositado Real (Banco)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">RD$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={confirmedAmountInput}
-                      onChange={(e) => setConfirmedAmountInput(e.target.value)}
-                      className="w-full pl-10 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-semibold">Ajusta este monto si el banco depositó una cantidad diferente por retenciones o comisiones reales.</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDeposit(null)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const amount = parseFloat(confirmedAmountInput);
-                    if (isNaN(amount) || amount <= 0) {
-                      showAlert('Por favor introduce un monto de depósito válido.');
-                      return;
-                    }
-                    try {
-                      const updatedDeposit: Partial<CardDeposit> = {
-                        status: 'confirmed',
-                        confirmedAmount: amount,
-                        confirmedAt: new Date().toISOString(),
-                        confirmedByEmployeeId: currentEmployee?.id || 'unknown',
-                        confirmedByEmployeeName: currentEmployee?.name || 'Cajero'
-                      };
-                      await firestoreService.updateDoc('cardDeposits', confirmingDeposit.id, updatedDeposit);
-                      setConfirmingDeposit(null);
-                      showAlert('Depósito confirmado y conciliado con éxito.');
-                    } catch (err) {
-                      console.error('Error confirming deposit:', err);
-                      showAlert('Hubo un error al confirmar el depósito.');
-                    }
-                  }}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
-                >
-                  <Check className="w-3.5 h-3.5" /> Confirmar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
       {/* Detalle de Liquidez en Efectivo Modal */}
       {isLiquidityModalOpen && (
