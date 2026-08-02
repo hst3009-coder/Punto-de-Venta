@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { increment } from 'firebase/firestore';
 import { CartItem, Product, Sale, CreditNote } from '../types';
 import { calculateSaleTotals, buildSaleBatchOperations, processSaleBatch } from '../lib/saleProcessor';
 
@@ -138,13 +139,13 @@ describe('Integration Test: Flujo Completo de Venta Compleja', () => {
     const prodTaxableOp = ops.find((op) => op.collectionName === 'products' && op.id === 'prod_taxable_1');
     expect(prodTaxableOp).toBeDefined();
     expect(prodTaxableOp?.type).toBe('update');
-    expect(prodTaxableOp?.data.stock).toBe(48);
+    expect(prodTaxableOp?.data.stock).toEqual(increment(-2));
 
     // Operación 3: Actualizar stock de Producto Exento
     const prodExemptOp = ops.find((op) => op.collectionName === 'products' && op.id === 'prod_exempt_1');
     expect(prodExemptOp).toBeDefined();
     expect(prodExemptOp?.type).toBe('update');
-    expect(prodExemptOp?.data.stock).toBe(27);
+    expect(prodExemptOp?.data.stock).toEqual(increment(-3));
 
     // Operación 4: Actualizar saldo de Nota de Crédito
     const cnOp = ops.find((op) => op.collectionName === 'creditNotes' && op.id === 'cn_1001');

@@ -1,5 +1,6 @@
 import { CartItem, Product, Sale, CreditNote } from '../types';
 import { roundCents, roundUpToNearestFive } from './money';
+import { increment } from 'firebase/firestore';
 
 export interface SaleTotals {
   subtotal: number;
@@ -128,11 +129,12 @@ export function buildSaleBatchOperations({
   for (const prod of updatedProducts) {
     const original = products.find((p) => p.id === prod.id);
     if (original && original.stock !== prod.stock) {
+      const totalUnitsDeducted = original.stock - prod.stock;
       operations.push({
         type: 'update',
         collectionName: 'products',
         id: prod.id,
-        data: { stock: prod.stock },
+        data: { stock: increment(-totalUnitsDeducted) },
       });
     }
   }

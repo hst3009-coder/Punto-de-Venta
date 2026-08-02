@@ -10,6 +10,7 @@ import {
 } from '../../types';
 import { SupplierPicker } from '../SupplierPicker';
 import { firestoreService, BatchOperation } from '../../lib/firebase';
+import { increment } from 'firebase/firestore';
 import {
   Truck,
   Plus,
@@ -313,7 +314,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
         collectionName: 'products',
         id: received.productId,
         data: {
-          stock: newStock,
+          stock: increment(received.quantity),
           cost: received.actualCost, // Newer cost replaces previous cost
         },
       });

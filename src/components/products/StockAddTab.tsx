@@ -3,6 +3,7 @@ import { Product, Category, DashboardConfig, ProductPackaging } from '../../type
 import { getPreTaxAmount, roundCents } from '../../lib/money';
 import { matchesProductSearch } from '../../lib/search';
 import { firestoreService } from '../../lib/firebase';
+import { increment } from 'firebase/firestore';
 import { useAlert } from '../../context/AlertContext';
 import { CategoryPicker } from '../CategoryPicker';
 import { getListPrice } from '../../lib/priceLists';
@@ -360,7 +361,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
         const newStock = freshProd.stock + item.addQuantity;
 
         const updateData: any = {
-          stock: newStock,
+          stock: increment(item.addQuantity),
         };
 
         if (item.cost > 0) updateData.cost = item.cost;

@@ -1,4 +1,5 @@
 import { Employee, Closure, Sale, CustomerRefund } from '../types';
+import { getSaleTimestamp } from './dates';
 
 export interface HighReturnRateAnomaly {
   employeeId: string;
@@ -41,13 +42,13 @@ export function detectHighReturnRate(
 
   // Filter sales in the last `days` days
   const recentSales = (sales || []).filter((s) => {
-    const t = new Date(s.date || s.createdAt || '').getTime();
+    const t = getSaleTimestamp(s);
     return !isNaN(t) && t >= cutoff;
   });
 
   // Filter refunds in the last `days` days
   const recentRefunds = (customerRefunds || []).filter((r) => {
-    const t = new Date(r.date || r.createdAt || '').getTime();
+    const t = new Date(r.createdAt || r.date || '').getTime();
     return !isNaN(t) && t >= cutoff;
   });
 
@@ -165,8 +166,8 @@ export function detectRepeatedCashDiscrepancies(
   if (!employees || employees.length === 0 || !closures || closures.length === 0) return [];
 
   const sortedClosures = [...closures].sort((a, b) => {
-    const ta = new Date(a.date || a.createdAt || '').getTime();
-    const tb = new Date(b.date || b.createdAt || '').getTime();
+    const ta = new Date(a.createdAt || a.date || '').getTime();
+    const tb = new Date(b.createdAt || b.date || '').getTime();
     return tb - ta; // newest first
   });
 
@@ -267,7 +268,7 @@ export function detectCreditSalesSpike(
     if (empSales.length === 0) continue;
 
     const earliestSaleTime = Math.min(
-      ...empSales.map((s) => new Date(s.date || s.createdAt || '').getTime()).filter((t) => !isNaN(t))
+      ...empSales.map((s) => getSaleTimestamp(s)).filter((t) => !isNaN(t) && t > 0)
     );
 
     const empCreatedTime = emp.createdAt ? new Date(emp.createdAt).getTime() : Infinity;
@@ -283,8 +284,8 @@ export function detectCreditSalesSpike(
     let historicalCreditTotal = 0;
 
     for (const sale of empSales) {
-      const t = new Date(sale.date || sale.createdAt || '').getTime();
-      if (isNaN(t)) continue;
+      const t = getSaleTimestamp(sale);
+      if (isNaN(t) || t === 0) continue;
 
       const creditAmt = getCreditAmount(sale);
       if (creditAmt <= 0) continue;

@@ -36,6 +36,7 @@ const DatabaseControlCenter = lazyWithRetry(() => import('./components/DatabaseC
 const ProductsView = lazyWithRetry(() => import('./components/products/ProductsView'), 'ProductsView');
 const DashboardView = lazyWithRetry(() => import('./components/DashboardView'), 'DashboardView');
 import { firestoreService, authService } from './lib/firebase';
+import { increment } from 'firebase/firestore';
 import { roundCents, roundUpToNearestFive } from './lib/money';
 import { buildSaleBatchOperations } from './lib/saleProcessor';
 import { getSaleTimestamp } from './lib/dates';
@@ -1122,7 +1123,7 @@ export default function App() {
       return updated;
     });
     try {
-      await firestoreService.updateDoc('products', productId, { stock: nextStock });
+      await firestoreService.updateDoc('products', productId, { stock: increment(amount) });
     } catch (err) {
       console.error('Error updating stock in Firestore:', err);
     }

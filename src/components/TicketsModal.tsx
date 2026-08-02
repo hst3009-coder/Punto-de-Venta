@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Sale, Product, PaymentMethod, StoreIdentity, CartItem, Employee, Closure, CustomerRefund, CreditNote, DashboardConfig } from '../types';
 import { X, Receipt } from 'lucide-react';
 import { firestoreService } from '../lib/firebase';
+import { increment } from 'firebase/firestore';
 import { getSaleTimestamp } from '../lib/dates';
 import { TicketsSearchList } from './tickets/TicketsSearchList';
 import { CancelSaleFlow } from './tickets/CancelSaleFlow';
@@ -236,7 +237,7 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
             type: 'update',
             collectionName: 'products',
             id: item.product.id,
-            data: { stock: prod.stock + qtyToRestore },
+            data: { stock: increment(qtyToRestore) },
           });
         }
       }
@@ -448,7 +449,7 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
         type: 'update',
         collectionName: 'products',
         id: returningItem.product.id,
-        data: { stock: prod.stock + returningItemQty },
+        data: { stock: increment(returningItemQty) },
       });
     }
 
