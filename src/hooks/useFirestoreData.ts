@@ -15,6 +15,8 @@ import {
   SupplierReturn,
   SupplierCreditNote,
   CardDeposit,
+  PurchaseOrder,
+  PurchaseReceipt,
   StoreIdentity,
   DashboardConfig,
 } from '../types';
@@ -116,6 +118,16 @@ export function useFirestoreData(enabled: boolean) {
 
   const [cardDeposits, setCardDeposits] = useState<CardDeposit[]>(() => {
     const saved = localStorage.getItem('pos_card_deposits');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
+    const saved = localStorage.getItem('pos_purchase_orders');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [purchaseReceipts, setPurchaseReceipts] = useState<PurchaseReceipt[]>(() => {
+    const saved = localStorage.getItem('pos_purchase_receipts');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -352,6 +364,36 @@ export function useFirestoreData(enabled: boolean) {
       }
     );
 
+    // 16. Purchase Orders
+    const unsubPurchaseOrders = firestoreService.subscribeToCollection<PurchaseOrder>(
+      'purchaseOrders',
+      (dbOrders) => {
+        const sorted = [...dbOrders].sort(
+          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
+        setPurchaseOrders(sorted);
+        localStorage.setItem('pos_purchase_orders', JSON.stringify(sorted));
+      },
+      (err) => {
+        console.error('Firestore purchaseOrders subscription error:', err);
+      }
+    );
+
+    // 17. Purchase Receipts
+    const unsubPurchaseReceipts = firestoreService.subscribeToCollection<PurchaseReceipt>(
+      'purchaseReceipts',
+      (dbReceipts) => {
+        const sorted = [...dbReceipts].sort(
+          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
+        setPurchaseReceipts(sorted);
+        localStorage.setItem('pos_purchase_receipts', JSON.stringify(sorted));
+      },
+      (err) => {
+        console.error('Firestore purchaseReceipts subscription error:', err);
+      }
+    );
+
     // 16. Configs (store_identity and dashboardConfig)
     const unsubConfigs = firestoreService.subscribeToCollection<any>(
       'configs',
@@ -394,6 +436,8 @@ export function useFirestoreData(enabled: boolean) {
       unsubSupplierReturns();
       unsubSupplierCreditNotes();
       unsubCardDeposits();
+      unsubPurchaseOrders();
+      unsubPurchaseReceipts();
       unsubConfigs();
     };
   }, [enabled]);
@@ -430,6 +474,10 @@ export function useFirestoreData(enabled: boolean) {
     setSupplierCreditNotes,
     cardDeposits,
     setCardDeposits,
+    purchaseOrders,
+    setPurchaseOrders,
+    purchaseReceipts,
+    setPurchaseReceipts,
     storeIdentity,
     setStoreIdentity,
     dashboardConfig,

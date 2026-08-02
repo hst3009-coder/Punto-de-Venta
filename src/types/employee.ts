@@ -33,6 +33,7 @@ export interface EmployeePermissions {
   accessDatabaseTools: boolean;
   editStoreSettings: boolean;
   managePayables?: boolean;
+  managePurchaseOrders?: boolean;
   manageReturns?: boolean;
   confirmBankDeposits?: boolean;
   exportFullBackup?: boolean;

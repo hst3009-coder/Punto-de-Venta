@@ -64,6 +64,14 @@ export const authService = {
   }
 };
 
+export interface BatchOperation {
+  type: 'set' | 'update' | 'delete';
+  collectionName: string;
+  id: string;
+  data?: any;
+  merge?: boolean;
+}
+
 // Dynamic Firestore Helper Functions
 export const firestoreService = {
   // Fetch all documents from a collection

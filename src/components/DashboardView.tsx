@@ -16,6 +16,8 @@ import {
   CreditNote,
   SupplierCreditNote,
   AuditLogEntry,
+  PurchaseOrder,
+  PurchaseReceipt,
 } from '../types';
 import {
   ArrowLeft,
@@ -40,6 +42,8 @@ import {
   Printer,
   DollarSign,
   Info,
+  Truck,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -73,10 +77,12 @@ const CreditosTab = lazyWithRetry(() => import('./dashboard/CreditosTab'), 'Cred
 const InventarioTab = lazyWithRetry(() => import('./dashboard/InventarioTab'), 'InventarioTab');
 const EmpleadosTab = lazyWithRetry(() => import('./dashboard/EmpleadosTab'), 'EmpleadosTab');
 const PayablesTab = lazyWithRetry(() => import('./dashboard/PayablesTab'), 'PayablesTab');
+const ComprasTab = lazyWithRetry(() => import('./dashboard/ComprasTab'), 'ComprasTab');
 const DevolucionesTab = lazyWithRetry(() => import('./dashboard/DevolucionesTab'), 'DevolucionesTab');
 const BancosTab = lazyWithRetry(() => import('./dashboard/BancosTab'), 'BancosTab');
 const NotasCreditoTab = lazyWithRetry(() => import('./dashboard/NotasCreditoTab'), 'NotasCreditoTab');
 const EstadoResultadosTab = lazyWithRetry(() => import('./dashboard/EstadoResultadosTab'), 'EstadoResultadosTab');
+const AnomaliasTab = lazyWithRetry(() => import('./dashboard/AnomaliasTab'), 'AnomaliasTab');
 const EgresosTab = lazyWithRetry(() => import('./dashboard/EgresosTab'), 'EgresosTab');
 const ActividadTab = lazyWithRetry(() => import('./dashboard/ActividadTab'), 'ActividadTab');
 
@@ -103,12 +109,15 @@ interface DashboardViewProps {
   supplierReturns?: SupplierReturn[];
   supplierCreditNotes?: SupplierCreditNote[];
   creditNotes?: CreditNote[];
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
 }
 
 type DashboardTab =
   | 'resumen'
   | 'ventas'
   | 'creditos'
+  | 'compras'
   | 'cuentas_pagar'
   | 'bancos'
   | 'inventario'
@@ -116,6 +125,7 @@ type DashboardTab =
   | 'notas_credito'
   | 'estado_resultados'
   | 'empleados'
+  | 'anomalias'
   | 'egresos'
   | 'actividad';
 
@@ -142,11 +152,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenMenudo,
   supplierReturns = [],
   supplierCreditNotes = [],
+  purchaseOrders = [],
+  purchaseReceipts = [],
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const permissions = usePermissions(currentEmployee);
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('resumen');
+  const [draftOrdersForCompras, setDraftOrdersForCompras] = useState<any[]>([]);
   const [selectedClosureModal, setSelectedClosureModal] = useState<Closure | null>(null);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
   const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
@@ -288,6 +301,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     { id: 'resumen', label: 'Resumen', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'ventas', label: 'Ventas', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'creditos', label: 'Créditos CxC', icon: <Users className="w-4 h-4" /> },
+    { id: 'compras', label: 'Compras / OC', icon: <Truck className="w-4 h-4" /> },
     { id: 'cuentas_pagar', label: 'Cuentas x Pagar', icon: <Receipt className="w-4 h-4" /> },
     { id: 'bancos', label: 'Bancos / Tarjetas', icon: <Landmark className="w-4 h-4" /> },
     { id: 'inventario', label: 'Inventario', icon: <Package className="w-4 h-4" /> },
@@ -295,6 +309,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     { id: 'notas_credito', label: 'Notas de Crédito', icon: <Receipt className="w-4 h-4" /> },
     { id: 'estado_resultados', label: 'Estado de Resultados', icon: <FileBarChart className="w-4 h-4" /> },
     { id: 'empleados', label: 'Empleados', icon: <Award className="w-4 h-4" /> },
+    { id: 'anomalias', label: 'Anomalías Operativas', icon: <ShieldAlert className="w-4 h-4" /> },
     { id: 'egresos', label: 'Egresos', icon: <CreditCard className="w-4 h-4" /> },
     { id: 'actividad', label: 'Actividad', icon: <Activity className="w-4 h-4" /> },
   ];
@@ -453,6 +468,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           {activeTab === 'resumen' && (
             <ResumenTab
+              products={products}
+              sales={sales}
+              onCreateDraftOrders={(drafts) => {
+                setDraftOrdersForCompras(drafts);
+                setActiveTab('compras');
+              }}
               totalSalesAmount={kpis.totalSalesAmount}
               totalTicketsCount={kpis.totalTicketsCount}
               marginPercent={kpis.marginPercent}
@@ -523,6 +544,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             />
           )}
 
+          {activeTab === 'compras' && (
+            <ComprasTab
+              products={products}
+              purchaseOrders={purchaseOrders}
+              purchaseReceipts={purchaseReceipts}
+              payables={payables}
+              currentEmployee={currentEmployee}
+              clerkName={currentEmployee?.name || 'Administrador'}
+              permissions={permissions}
+              showAlert={(msg) => showAlert('Órdenes de Compra', msg)}
+              initialDraftOrders={draftOrdersForCompras}
+              onClearDrafts={() => setDraftOrdersForCompras([])}
+            />
+          )}
+
           {activeTab === 'cuentas_pagar' && (
             <PayablesTab
               products={products}
@@ -577,6 +613,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               payables={payables}
               payablePayments={payablePayments}
               exportToExcel={kpis.exportToExcel}
+            />
+          )}
+
+          {activeTab === 'anomalias' && (
+            <AnomaliasTab
+              employees={employees}
+              sales={sales}
+              customerRefunds={customerRefunds || []}
+              closures={closures}
+              permissions={permissions}
             />
           )}
 

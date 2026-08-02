@@ -1,5 +1,34 @@
 import { ClientPriceList } from './customer';
 
+export interface PurchaseOrderItem {
+  productId: string;
+  productName: string;
+  quantityOrdered: number;
+  quantityReceived: number; // acumulado de todas las recepciones parciales
+  estimatedCost: number; // costo esperado por unidad al crear la orden
+}
+
+export interface PurchaseOrder {
+  id: string;
+  supplierName: string;
+  items: PurchaseOrderItem[];
+  status: 'open' | 'partial' | 'completed' | 'cancelled';
+  employeeId?: string;
+  employeeName?: string;
+  createdAt?: string;
+}
+
+export interface PurchaseReceipt {
+  id: string;
+  purchaseOrderId: string;
+  receivedItems: { productId: string; productName: string; quantity: number; actualCost: number }[];
+  totalAmount: number; // suma de quantity × actualCost de este recibo específico
+  linkedAccountPayableId?: string;
+  employeeId?: string;
+  employeeName?: string;
+  createdAt?: string;
+}
+
 export interface AccountPayable {
   id: string;
   supplierName: string;

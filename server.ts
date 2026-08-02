@@ -65,6 +65,45 @@ REGLAS OBLIGATORIAS:
     }
   });
 
+  // API Route: AI Restock Summary
+  app.post('/api/suggest-restock-summary', async (req, res) => {
+    try {
+      const { suggestions } = req.body;
+      if (!Array.isArray(suggestions) || suggestions.length === 0) {
+        return res.status(400).json({ error: 'Suggestions array is required and cannot be empty.' });
+      }
+
+      const ai = getGeminiClient();
+
+      const itemsText = suggestions.map((item: any, i: number) => {
+        return `${i + 1}. Producto: "${item.productName}", Stock actual: ${item.currentStock}, Cobertura restante: ${item.daysOfCoverage?.toFixed(1) || '0'} días, Cantidad sugerida a pedir: ${item.suggestedQty}${item.supplierName ? `, Proveedor: ${item.supplierName}` : ''}`;
+      }).join('\n');
+
+      const prompt = `A continuación tienes la lista de productos que requieren reabastecimiento en un punto de venta (calculados matemáticamente con base en el ritmo real de ventas):
+
+${itemsText}
+
+Por favor redacta un párrafo corto y ejecutivo en español que resuma la situación general de reabastecimiento.
+Destaca los productos con menor cobertura de días y ofrece una breve recomendación práctica para el encargado de compras.
+
+REGLAS OBLIGATORIAS:
+- No realices nuevos cálculos matemáticos; usa estrictamente los datos proporcionados.
+- Sé breve, directo y profesional (entre 2 y 4 oraciones).
+- No uses títulos ni listas en viñetas, sólo un párrafo fluido de texto.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: prompt,
+      });
+
+      const summary = (response.text || '').trim();
+      return res.json({ summary });
+    } catch (err: any) {
+      console.error('Error in /api/suggest-restock-summary:', err);
+      return res.status(500).json({ error: err.message || 'Failed to generate restock summary' });
+    }
+  });
+
   // Vite middleware setup
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

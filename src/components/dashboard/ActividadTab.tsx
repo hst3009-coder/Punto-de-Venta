@@ -104,6 +104,60 @@ const getActionConfig = (action: AuditLogEntry['action']) => {
   }
 };
 
+interface AuditLogRowProps {
+  log: AuditLogEntry;
+}
+
+const AuditLogRow: React.FC<AuditLogRowProps> = React.memo(({ log }) => {
+  const config = getActionConfig(log.action);
+  const IconComp = config.icon;
+  const formattedDate = log.createdAt 
+    ? new Date(log.createdAt).toLocaleString('es-DO', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      }) 
+    : 'Fecha no registrada';
+
+  return (
+    <div 
+      className="p-4 hover:bg-slate-50/70 transition-colors flex items-start gap-3.5"
+    >
+      {/* Action Icon Badge */}
+      <div className={`w-9 h-9 rounded-2xl ${config.iconBg} flex items-center justify-center shrink-0 mt-0.5`}>
+        <IconComp className="w-4 h-4" />
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${config.badgeBg}`}>
+              {config.label}
+            </span>
+            <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+              <User className="w-3 h-3 text-slate-400 inline" />
+              {log.employeeName || 'Sistema / Administrador'}
+            </span>
+          </div>
+          
+          <span className="text-[11px] font-mono font-semibold text-slate-400 flex items-center gap-1">
+            <Clock className="w-3 h-3 text-slate-300" />
+            {formattedDate}
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-700 font-medium leading-relaxed break-words">
+          {log.description}
+        </p>
+      </div>
+    </div>
+  );
+});
+
 export const ActividadTab: React.FC<ActividadTabProps> = ({
   employees = []
 }) => {
@@ -289,56 +343,9 @@ export const ActividadTab: React.FC<ActividadTabProps> = ({
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {filteredLogs.map((log) => {
-              const config = getActionConfig(log.action);
-              const IconComp = config.icon;
-              const formattedDate = log.createdAt 
-                ? new Date(log.createdAt).toLocaleString('es-DO', { 
-                    day: '2-digit', 
-                    month: '2-digit', 
-                    year: 'numeric', 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    second: '2-digit'
-                  }) 
-                : 'Fecha no registrada';
-
-              return (
-                <div 
-                  key={log.id} 
-                  className="p-4 hover:bg-slate-50/70 transition-colors flex items-start gap-3.5"
-                >
-                  {/* Action Icon Badge */}
-                  <div className={`w-9 h-9 rounded-2xl ${config.iconBg} flex items-center justify-center shrink-0 mt-0.5`}>
-                    <IconComp className="w-4 h-4" />
-                  </div>
-
-                  {/* Main Content */}
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${config.badgeBg}`}>
-                          {config.label}
-                        </span>
-                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                          <User className="w-3 h-3 text-slate-400 inline" />
-                          {log.employeeName || 'Sistema / Administrador'}
-                        </span>
-                      </div>
-                      
-                      <span className="text-[11px] font-mono font-semibold text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-300" />
-                        {formattedDate}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-700 font-medium leading-relaxed break-words">
-                      {log.description}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredLogs.map((log) => (
+              <AuditLogRow key={log.id} log={log} />
+            ))}
           </div>
         )}
       </div>

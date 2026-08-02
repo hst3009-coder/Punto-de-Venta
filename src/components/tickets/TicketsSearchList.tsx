@@ -25,6 +25,99 @@ export interface TicketsSearchListProps {
   getRefundTotal: (sale: Sale) => number;
 }
 
+interface TicketRowProps {
+  sale: Sale;
+  isSelected: boolean;
+  onSelectSale: (sale: Sale) => void;
+  onOpenCancelPrompt: (saleId: string, e: React.MouseEvent) => void;
+  getPaymentBadge: (method: PaymentMethod) => React.ReactNode;
+  getRefundTotal: (sale: Sale) => number;
+}
+
+const TicketRow: React.FC<TicketRowProps> = React.memo(({
+  sale,
+  isSelected,
+  onSelectSale,
+  onOpenCancelPrompt,
+  getPaymentBadge,
+  getRefundTotal,
+}) => {
+  const isCancelled = sale.isCancelled;
+  const refundAmount = getRefundTotal(sale);
+
+  return (
+    <div
+      onClick={() => onSelectSale(sale)}
+      className={`p-4 flex items-center justify-between gap-4 cursor-pointer transition-all ${
+        isSelected
+          ? 'bg-indigo-50/70 border-l-4 border-indigo-600'
+          : 'hover:bg-slate-50/50 border-l-4 border-transparent'
+      }`}
+    >
+      <div className="space-y-1.5 flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs font-black text-slate-800">
+            #{sale.ticketNumber}
+          </span>
+          {isCancelled && (
+            <span className="bg-rose-50 text-rose-600 border border-rose-100 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+              Cancelado / Devuelto
+            </span>
+          )}
+          {!isCancelled && (sale as any).returnedItems && (sale as any).returnedItems.length > 0 && (
+            <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+              Devolución Parcial
+            </span>
+          )}
+        </div>
+
+        {/* List items preview */}
+        <p className="text-[10px] text-slate-400 font-semibold truncate max-w-xs">
+          {sale.items.map((i) => `${i.product.name} (x${i.quantity})`).join(', ')}
+        </p>
+
+        <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold">
+          <span>{sale.date}</span>
+          <span>•</span>
+          <span>{getPaymentBadge(sale.paymentMethod)}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="text-right">
+          <div
+            className={`text-sm font-black ${
+              isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'
+            }`}
+          >
+            ${sale.total.toFixed(2)}
+          </div>
+          {refundAmount > 0 && (
+            <div className="text-[9px] font-extrabold text-rose-600 mt-0.5">
+              Dev: ${refundAmount.toFixed(2)}
+            </div>
+          )}
+        </div>
+
+        {/* Fast delete/cancel icon */}
+        <button
+          type="button"
+          disabled={isCancelled}
+          onClick={(e) => onOpenCancelPrompt(sale.id, e)}
+          title="Anular factura completa"
+          className={`p-2 rounded-lg border transition-all ${
+            isCancelled
+              ? 'bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed'
+              : 'bg-rose-50 hover:bg-rose-100 text-rose-500 border-rose-100 hover:border-rose-200 cursor-pointer'
+          }`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
 export const TicketsSearchList: React.FC<TicketsSearchListProps> = ({
   filteredSales,
   salesHistory,
@@ -169,84 +262,17 @@ export const TicketsSearchList: React.FC<TicketsSearchListProps> = ({
             </p>
           </div>
         ) : (
-          filteredSales.map((sale) => {
-            const isSelected = selectedSale?.id === sale.id;
-            const isCancelled = sale.isCancelled;
-            const refundAmount = getRefundTotal(sale);
-
-            return (
-              <div
-                key={sale.id}
-                onClick={() => onSelectSale(sale)}
-                className={`p-4 flex items-center justify-between gap-4 cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-indigo-50/70 border-l-4 border-indigo-600'
-                    : 'hover:bg-slate-50/50 border-l-4 border-transparent'
-                }`}
-              >
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-black text-slate-800">
-                      #{sale.ticketNumber}
-                    </span>
-                    {isCancelled && (
-                      <span className="bg-rose-50 text-rose-600 border border-rose-100 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                        Cancelado / Devuelto
-                      </span>
-                    )}
-                    {!isCancelled && (sale as any).returnedItems && (sale as any).returnedItems.length > 0 && (
-                      <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                        Devolución Parcial
-                      </span>
-                    )}
-                  </div>
-
-                  {/* List items preview */}
-                  <p className="text-[10px] text-slate-400 font-semibold truncate max-w-xs">
-                    {sale.items.map((i) => `${i.product.name} (x${i.quantity})`).join(', ')}
-                  </p>
-
-                  <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold">
-                    <span>{sale.date}</span>
-                    <span>•</span>
-                    <span>{getPaymentBadge(sale.paymentMethod)}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
-                    <div
-                      className={`text-sm font-black ${
-                        isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'
-                      }`}
-                    >
-                      ${sale.total.toFixed(2)}
-                    </div>
-                    {refundAmount > 0 && (
-                      <div className="text-[9px] font-extrabold text-rose-600 mt-0.5">
-                        Dev: ${refundAmount.toFixed(2)}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Fast delete/cancel icon */}
-                  <button
-                    type="button"
-                    disabled={isCancelled}
-                    onClick={(e) => onOpenCancelPrompt(sale.id, e)}
-                    title="Anular factura completa"
-                    className={`p-2 rounded-lg border transition-all ${
-                      isCancelled
-                        ? 'bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed'
-                        : 'bg-rose-50 hover:bg-rose-100 text-rose-500 border-rose-100 hover:border-rose-200 cursor-pointer'
-                    }`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+          filteredSales.map((sale) => (
+            <TicketRow
+              key={sale.id}
+              sale={sale}
+              isSelected={selectedSale?.id === sale.id}
+              onSelectSale={onSelectSale}
+              onOpenCancelPrompt={onOpenCancelPrompt}
+              getPaymentBadge={getPaymentBadge}
+              getRefundTotal={getRefundTotal}
+            />
+          ))
         )}
       </div>
     </div>

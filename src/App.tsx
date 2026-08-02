@@ -37,6 +37,7 @@ const ProductsView = lazyWithRetry(() => import('./components/products/ProductsV
 const DashboardView = lazyWithRetry(() => import('./components/DashboardView'), 'DashboardView');
 import { firestoreService, authService } from './lib/firebase';
 import { roundCents, roundUpToNearestFive } from './lib/money';
+import { buildSaleBatchOperations } from './lib/saleProcessor';
 import { getSaleTimestamp } from './lib/dates';
 import { getListPrice } from './lib/priceLists';
 import { getEffectiveItemInfo } from './lib/bulkPricing';
@@ -145,6 +146,8 @@ export default function App() {
     setSupplierCreditNotes,
     cardDeposits,
     setCardDeposits,
+    purchaseOrders,
+    purchaseReceipts,
     storeIdentity,
     setStoreIdentity,
     dashboardConfig,
@@ -1133,21 +1136,10 @@ export default function App() {
       soldBy: currentEmployee ? { id: currentEmployee.id, name: currentEmployee.name } : undefined
     };
 
-    // Always perform local stock deduction and add sale record to local state immediately
-    const updatedProducts = products.map((p) => {
-      const itemsForProduct = cart.filter(
-        (item) => item.product.id === p.id && item.product.category !== 'Genérico'
-      );
-      if (itemsForProduct.length > 0) {
-        const totalUnitsDeducted = itemsForProduct.reduce((sum, item) => {
-          const qty = item.selectedPackaging
-            ? item.selectedPackaging.unitsPerPackage * item.quantity
-            : item.quantity;
-          return sum + qty;
-        }, 0);
-        return { ...p, stock: p.stock - totalUnitsDeducted };
-      }
-      return p;
+    const { updatedProducts, updatedCreditNotes, operations } = buildSaleBatchOperations({
+      sale: saleWithEmployee,
+      products,
+      creditNotes,
     });
 
     setProducts(updatedProducts);
@@ -1159,79 +1151,9 @@ export default function App() {
       return updatedSales;
     });
 
-    // Calculate credit note deductions from local state and prepare Firestore batch update operations
-    let updatedCreditNotes = [...creditNotes];
-    const creditNoteBatchOps: Array<{ id: string; remainingBalance: number; status: 'active' | 'depleted' | 'voided' }> = [];
-
-    if (isMixedSale(saleWithEmployee)) {
-      const cnRows = saleWithEmployee.paymentBreakdown.filter(b => b.method === 'credit_note' && (b.amount || 0) > 0);
-      for (const row of cnRows) {
-        const applied = roundCents(Number(row.amount) || 0);
-        const currentNote = updatedCreditNotes.find(cn => 
-          (row.creditNoteId && cn.id === row.creditNoteId) ||
-          (row.creditNoteCode && cn.code.toUpperCase() === row.creditNoteCode.toUpperCase())
-        );
-
-        if (currentNote) {
-          const newRemaining = roundCents(Math.max(0, currentNote.remainingBalance - applied));
-          const newStatus: 'active' | 'depleted' | 'voided' = newRemaining === 0 ? 'depleted' : 'active';
-
-          const updatedNote = {
-            ...currentNote,
-            remainingBalance: newRemaining,
-            status: newStatus,
-          };
-
-          updatedCreditNotes = updatedCreditNotes.map(cn => cn.id === currentNote.id ? updatedNote : cn);
-          creditNoteBatchOps.push({
-            id: currentNote.id,
-            remainingBalance: newRemaining,
-            status: newStatus,
-          });
-        }
-      }
-    }
-
-    if (creditNoteBatchOps.length > 0) {
+    if (updatedCreditNotes !== creditNotes) {
       setCreditNotes(updatedCreditNotes);
       saveCreditNotesToStorage(updatedCreditNotes);
-    }
-
-    const operations: BatchOperation[] = [];
-
-    // 1. Add operation to save sale record to Firestore
-    operations.push({
-      type: 'set',
-      collectionName: 'sales',
-      id: saleWithEmployee.id,
-      data: saleWithEmployee,
-      merge: true,
-    });
-
-    // 2. Add operations to deduct stock from products in Firestore
-    for (const prod of updatedProducts) {
-      const original = products.find((p) => p.id === prod.id);
-      if (original && original.stock !== prod.stock) {
-        operations.push({
-          type: 'update',
-          collectionName: 'products',
-          id: prod.id,
-          data: { stock: prod.stock },
-        });
-      }
-    }
-
-    // 3. Add operations to deduct credit note balances in Firestore (atomically in the same batch)
-    for (const cnOp of creditNoteBatchOps) {
-      operations.push({
-        type: 'update',
-        collectionName: 'creditNotes',
-        id: cnOp.id,
-        data: {
-          remainingBalance: cnOp.remainingBalance,
-          status: cnOp.status,
-        }
-      });
     }
 
     try {
@@ -2203,6 +2125,8 @@ export default function App() {
             onOpenMenudo={() => setIsMenudoOpen(true)}
             supplierReturns={supplierReturns}
             supplierCreditNotes={supplierCreditNotes}
+            purchaseOrders={purchaseOrders}
+            purchaseReceipts={purchaseReceipts}
           />
         </React.Suspense>
       )}

@@ -5,6 +5,10 @@ export function roundCents(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export function formatCurrency(amount: number): string {
+  return `$${(amount || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function getPreTaxAmount(price: number, taxExempt: boolean | undefined): number {
   if (taxExempt) {
     return price;

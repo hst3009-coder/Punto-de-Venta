@@ -66,7 +66,7 @@ export function useCardDepositGenerator({
             const expectedDepositDate = format(expectedDepositDateDate, 'yyyy-MM-dd');
 
             const newDeposit: CardDeposit = {
-              id: `deposit_${dateStr}_${Date.now()}`,
+              id: `deposit_${dateStr}`,
               batchDate: dateStr,
               expectedDepositDate,
               grossAmount: calculatedGross,

@@ -20,6 +20,50 @@ interface VentasTabProps {
   setSelectedClosureModal: (closure: Closure) => void;
 }
 
+interface ClosureRowProps {
+  closure: Closure & { sales: Sale[]; salesCount: number; actualTotal: number };
+  setSelectedClosureModal: (closure: Closure) => void;
+}
+
+const ClosureRow: React.FC<ClosureRowProps> = React.memo(({ closure, setSelectedClosureModal }) => {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden transition-all hover:border-indigo-200 hover:shadow-md">
+      <button 
+        onClick={() => setSelectedClosureModal(closure)}
+        className="w-full p-4 flex flex-wrap items-center justify-between gap-4 transition-colors text-left cursor-pointer"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <Receipt className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs font-black text-slate-800 block">
+              {formatSpanishDate(new Date(closure.createdAt || closure.date))}
+            </span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase">Cajero: {closure.clerkName}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="text-right">
+            <span className="text-[9px] font-black text-slate-400 uppercase block">Ventas Total</span>
+            <span className="text-sm font-black font-mono text-slate-800">RD$ {closure.actualTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-[9px] font-black text-slate-400 uppercase block">Diferencia</span>
+            <span className={`text-sm font-black font-mono ${closure.difference < 0 ? 'text-rose-600' : closure.difference > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+              RD$ {closure.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs transition-colors">
+            Ver Detalle
+          </div>
+        </div>
+      </button>
+    </div>
+  );
+});
+
 export const VentasTab: React.FC<VentasTabProps> = ({
   paymentMethodsData,
   totalSalesAmount,
@@ -82,44 +126,9 @@ export const VentasTab: React.FC<VentasTabProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {closuresWithSales.map(closure => {
-              return (
-                <div key={closure.id} className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden transition-all hover:border-indigo-200 hover:shadow-md">
-                  <button 
-                    onClick={() => setSelectedClosureModal(closure)}
-                    className="w-full p-4 flex flex-wrap items-center justify-between gap-4 transition-colors text-left cursor-pointer"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                        <Receipt className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-slate-800 block">
-                          {formatSpanishDate(new Date(closure.createdAt || closure.date))}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase">Cajero: {closure.clerkName}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-6">
-                      <div className="text-right">
-                        <span className="text-[9px] font-black text-slate-400 uppercase block">Ventas Total</span>
-                        <span className="text-sm font-black font-mono text-slate-800">RD$ {closure.actualTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[9px] font-black text-slate-400 uppercase block">Diferencia</span>
-                        <span className={`text-sm font-black font-mono ${closure.difference < 0 ? 'text-rose-600' : closure.difference > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
-                          RD$ {closure.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs transition-colors">
-                        Ver Detalle
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              );
-            })}
+            {closuresWithSales.map(closure => (
+              <ClosureRow key={closure.id} closure={closure} setSelectedClosureModal={setSelectedClosureModal} />
+            ))}
           </div>
         )}
       </div>

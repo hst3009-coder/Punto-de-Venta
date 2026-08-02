@@ -30,6 +30,9 @@ import {
   Cell 
 } from 'recharts';
 
+import { Product, Sale } from '../../types';
+import { RestockSuggestionsPanel, DraftOrderGroup } from './RestockSuggestionsPanel';
+
 interface ResumenTabProps {
   totalSalesAmount: number;
   totalTicketsCount: number;
@@ -51,6 +54,9 @@ interface ResumenTabProps {
   filterType: 'Día' | 'Semana' | 'Mes' | 'Rango';
   onNavigateToProduct: (id: string) => void;
   onNavigateToCustomer: (id: string) => void;
+  products?: Product[];
+  sales?: Sale[];
+  onCreateDraftOrders?: (drafts: DraftOrderGroup[]) => void;
 }
 
 export const ResumenTab: React.FC<ResumenTabProps> = ({
@@ -73,7 +79,10 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
   chartData = [],
   filterType = 'Día',
   onNavigateToProduct,
-  onNavigateToCustomer
+  onNavigateToCustomer,
+  products = [],
+  sales = [],
+  onCreateDraftOrders = () => {},
 }) => {
   const [showAllLowStock, setShowAllLowStock] = useState(false);
   const [showAllOverlimit, setShowAllOverlimit] = useState(false);
@@ -265,6 +274,13 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
         </div>
 
       </div>
+
+      {/* RESTOCK SUGGESTIONS PANEL */}
+      <RestockSuggestionsPanel
+        products={products}
+        sales={sales}
+        onCreateDraftOrders={onCreateDraftOrders}
+      />
 
       {/* 3. ALERTS & INSIGHTS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
