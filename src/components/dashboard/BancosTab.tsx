@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Landmark, Check, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Landmark, Check, X, Clock, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { CardDeposit, Employee, EmployeePermissions } from '../../types';
 import { roundCents } from '../../lib/money';
 import { firestoreService } from '../../lib/firebase';
@@ -21,6 +21,23 @@ export const BancosTab: React.FC<BancosTabProps> = ({
 }) => {
   const [confirmingDeposit, setConfirmingDeposit] = useState<CardDeposit | null>(null);
   const [confirmedAmountInput, setConfirmedAmountInput] = useState<string>('');
+  const [showHistory, setShowHistory] = useState(false);
+
+  const pendingDeposits = useMemo(() => {
+    return cardDeposits
+      .filter((d) => d.status === 'pending')
+      .sort((a, b) => a.expectedDepositDate.localeCompare(b.expectedDepositDate));
+  }, [cardDeposits]);
+
+  const confirmedDeposits = useMemo(() => {
+    return cardDeposits
+      .filter((d) => d.status === 'confirmed')
+      .sort((a, b) => {
+        const timeA = a.confirmedAt ? new Date(a.confirmedAt).getTime() : 0;
+        const timeB = b.confirmedAt ? new Date(b.confirmedAt).getTime() : 0;
+        return timeB - timeA;
+      });
+  }, [cardDeposits]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -80,13 +97,19 @@ export const BancosTab: React.FC<BancosTabProps> = ({
         </div>
       </div>
 
-      {/* Main List Table */}
+      {/* SECTION 1: PENDIENTES POR CONFIRMAR */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex justify-between items-center pb-2 border-b border-slate-100">
           <div>
-            <h3 className="text-sm font-black text-slate-850 uppercase tracking-tight">Depósitos de Tarjeta</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Control de acreditaciones bancarias y comisiones</p>
+            <h3 className="text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-500" />
+              Pendientes por Confirmar
+            </h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Control de acreditaciones bancarias pendientes en tránsito</p>
           </div>
+          <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold rounded-full">
+            {pendingDeposits.length} {pendingDeposits.length === 1 ? 'pendiente' : 'pendientes'}
+          </span>
         </div>
 
         <div className="overflow-x-auto">
@@ -98,22 +121,103 @@ export const BancosTab: React.FC<BancosTabProps> = ({
                 <th className="py-3 px-4 text-right">Monto Bruto</th>
                 <th className="py-3 px-4 text-right">Comisión (%)</th>
                 <th className="py-3 px-4 text-right">Monto Neto Est.</th>
-                <th className="py-3 px-4 text-right">Monto Real Dep.</th>
                 <th className="py-3 px-4 text-center">Estado</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {cardDeposits.length === 0 ? (
+              {pendingDeposits.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-8 text-xs text-slate-400 font-medium italic">
-                    No hay depósitos de tarjetas registrados. Realiza ventas con tarjeta para generarlos.
+                  <td colSpan={7} className="text-center py-8 text-xs text-emerald-600 font-bold">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <span>No hay depósitos pendientes ✓</span>
+                    </div>
                   </td>
                 </tr>
               ) : (
-                [...cardDeposits]
-                  .sort((a, b) => a.expectedDepositDate.localeCompare(b.expectedDepositDate))
-                  .map((deposit) => {
+                pendingDeposits.map((deposit) => {
+                  const displayBatch = deposit.batchDate.split('-').reverse().join('/');
+                  const displayExpected = deposit.expectedDepositDate.split('-').reverse().join('/');
+                  return (
+                    <tr key={deposit.id} className="border-b border-slate-100 hover:bg-slate-50/55 transition-colors text-xs font-semibold text-slate-700">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-800">{displayBatch}</td>
+                      <td className="py-3.5 px-4 font-mono">{displayExpected}</td>
+                      <td className="py-3.5 px-4 text-right font-mono">RD$ {deposit.grossAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3.5 px-4 text-right text-rose-500 font-mono">-{deposit.feePercent}%</td>
+                      <td className="py-3.5 px-4 text-right font-mono text-indigo-600">RD$ {deposit.netAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider inline-block bg-amber-50 text-amber-700 border border-amber-200">
+                          Pendiente
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        {permissions.confirmBankDeposits ? (
+                          <button
+                            onClick={() => {
+                              setConfirmingDeposit(deposit);
+                              setConfirmedAmountInput(deposit.netAmount.toString());
+                            }}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase rounded-lg transition-colors cursor-pointer flex items-center gap-1 mx-auto"
+                          >
+                            <Check className="w-3 h-3" /> Confirmar
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">Pendiente</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* SECTION 2: HISTORIAL DE CONFIRMADOS (COLLAPSIBLE) */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+        <button
+          type="button"
+          onClick={() => setShowHistory(!showHistory)}
+          className="w-full flex justify-between items-center text-left focus:outline-none group cursor-pointer"
+        >
+          <div>
+            <h3 className="text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-emerald-600" />
+              Historial de Confirmados ({confirmedDeposits.length})
+            </h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Registro de depósitos bancarios conciliados y cerrados</p>
+          </div>
+          <div className="flex items-center gap-1.5 text-slate-500 group-hover:text-slate-800 font-bold text-xs transition-colors">
+            <span>{showHistory ? 'Ocultar' : 'Mostrar'}</span>
+            {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        </button>
+
+        {showHistory && (
+          <div className="overflow-x-auto pt-2 border-t border-slate-100 animate-fade-in">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-150 text-[10px] font-bold text-slate-400 uppercase bg-slate-50/50">
+                  <th className="py-3 px-4">Fecha Lote</th>
+                  <th className="py-3 px-4">Fecha Esperada</th>
+                  <th className="py-3 px-4 text-right">Monto Bruto</th>
+                  <th className="py-3 px-4 text-right">Comisión (%)</th>
+                  <th className="py-3 px-4 text-right">Monto Neto Est.</th>
+                  <th className="py-3 px-4 text-right">Monto Real Dep.</th>
+                  <th className="py-3 px-4 text-center">Confirmación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {confirmedDeposits.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-xs text-slate-400 font-medium italic">
+                      No hay depósitos confirmados en el historial.
+                    </td>
+                  </tr>
+                ) : (
+                  confirmedDeposits.map((deposit) => {
                     const displayBatch = deposit.batchDate.split('-').reverse().join('/');
                     const displayExpected = deposit.expectedDepositDate.split('-').reverse().join('/');
                     return (
@@ -123,50 +227,24 @@ export const BancosTab: React.FC<BancosTabProps> = ({
                         <td className="py-3.5 px-4 text-right font-mono">RD$ {deposit.grossAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                         <td className="py-3.5 px-4 text-right text-rose-500 font-mono">-{deposit.feePercent}%</td>
                         <td className="py-3.5 px-4 text-right font-mono text-indigo-600">RD$ {deposit.netAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3.5 px-4 text-right font-mono text-emerald-600">
-                          {deposit.status === 'confirmed' 
-                            ? `RD$ ${(deposit.confirmedAmount ?? deposit.netAmount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
-                            : '—'}
+                        <td className="py-3.5 px-4 text-right font-mono text-emerald-600 font-bold">
+                          RD$ {(deposit.confirmedAmount ?? deposit.netAmount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider inline-block ${
-                            deposit.status === 'confirmed'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                            {deposit.status === 'confirmed' ? 'Confirmado' : 'Pendiente'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-center">
-                          {deposit.status === 'pending' ? (
-                            permissions.confirmBankDeposits ? (
-                              <button
-                                onClick={() => {
-                                  setConfirmingDeposit(deposit);
-                                  setConfirmedAmountInput(deposit.netAmount.toString());
-                                }}
-                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase rounded-lg transition-colors cursor-pointer flex items-center gap-1 mx-auto"
-                              >
-                                <Check className="w-3 h-3" /> Confirmar
-                              </button>
-                            ) : (
-                              <span className="text-xs text-slate-400 font-medium">Pendiente</span>
-                            )
-                          ) : (
-                            <div className="text-[10px] text-slate-400 block font-normal leading-normal">
-                              <span className="font-bold">{deposit.confirmedByEmployeeName || 'Cajero'}</span>
-                              <br />
-                              {new Date(deposit.confirmedAt!).toLocaleDateString('es-DO', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          )}
+                          <div className="text-[10px] text-slate-500 block font-normal leading-normal">
+                            <span className="font-bold text-slate-700">{deposit.confirmedByEmployeeName || 'Cajero'}</span>
+                            <br />
+                            {deposit.confirmedAt ? new Date(deposit.confirmedAt).toLocaleDateString('es-DO', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </div>
                         </td>
                       </tr>
                     );
                   })
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Deposit Confirmation Modal dialog */}
@@ -255,6 +333,17 @@ export const BancosTab: React.FC<BancosTabProps> = ({
                       confirmedByEmployeeName: currentEmployee?.name || 'Cajero'
                     };
                     await firestoreService.updateDoc('cardDeposits', confirmingDeposit.id, updatedDeposit);
+                    try {
+                      await firestoreService.addDoc('auditLogs', {
+                        action: 'confirm_bank_deposit',
+                        description: `Depósito bancario confirmado por RD$ ${amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (Lote: ${confirmingDeposit.batchDate})`,
+                        employeeId: currentEmployee?.id || '',
+                        employeeName: currentEmployee?.name || 'Cajero',
+                        createdAt: new Date().toISOString()
+                      });
+                    } catch (auditErr) {
+                      console.error('Error logging confirm_bank_deposit audit:', auditErr);
+                    }
                     setConfirmingDeposit(null);
                     showAlert('Depósito confirmado y conciliado con éxito.');
                   } catch (err) {

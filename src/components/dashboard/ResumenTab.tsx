@@ -43,6 +43,7 @@ interface ResumenTabProps {
   overlimitCustomerAlerts: Array<{ id: string; name: string; debt: number; limit: number; exceeded: number }>;
   upcomingPayablesAlerts: Array<{ id: string; supplierName: string; concept: string; balance: number; dueDate: string; diffDays: number; isOverdue: boolean; isSoon: boolean }>;
   lowMarginAlerts: Array<{ id: string; name: string; category: string; actualMargin: number; targetMargin: number; diff: number; isBelow: boolean }>;
+  cardTerminalAlerts?: Array<{ id: string; date: string; formattedDate: string; employeeName: string; systemAmount: number; reportedAmount: number }>;
   topProductsData: Array<{ id: string; name: string; qty: number; total: number }>;
   expiringSoonProducts: Array<{ id: string; name: string; expirationDate: string; daysLeft: number }>;
   paymentMethodsData: Array<{ name: string; value: number; color: string }>;
@@ -65,6 +66,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
   overlimitCustomerAlerts = [],
   upcomingPayablesAlerts = [],
   lowMarginAlerts = [],
+  cardTerminalAlerts = [],
   topProductsData = [],
   expiringSoonProducts = [],
   paymentMethodsData = [],
@@ -77,6 +79,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
   const [showAllOverlimit, setShowAllOverlimit] = useState(false);
   const [showAllPayablesAlerts, setShowAllPayablesAlerts] = useState(false);
   const [showAllLowMargin, setShowAllLowMargin] = useState(false);
+  const [showAllCardTerminal, setShowAllCardTerminal] = useState(false);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -264,7 +267,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
       </div>
 
       {/* 3. ALERTS & INSIGHTS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         
         {/* Alert 1: Low Stock */}
         <div className="bg-white border border-slate-200/80 p-5 rounded-3xl shadow-2xs space-y-3">
@@ -336,7 +339,47 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
           )}
         </div>
 
-        {/* Alert 3: Upcoming Payables */}
+        {/* Alert 3: Card Terminal Discrepancies */}
+        <div className="bg-white border border-slate-200/80 p-5 rounded-3xl shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-rose-500" />
+              <h4 className="text-xs font-black uppercase text-slate-800">Discrepancias Terminal ({cardTerminalAlerts.length})</h4>
+            </div>
+          </div>
+          {cardTerminalAlerts.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No hay discrepancias registradas</p>
+          ) : (
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {(showAllCardTerminal ? cardTerminalAlerts : cardTerminalAlerts.slice(0, 3)).map(item => (
+                <div key={item.id} className="p-2.5 bg-rose-50/50 border border-rose-100 rounded-xl space-y-1 text-xs">
+                  <div className="flex justify-between items-center font-bold text-slate-800">
+                    <span className="truncate max-w-[110px]">{item.employeeName}</span>
+                    <span className="text-[9px] text-slate-400 font-mono">{item.formattedDate}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-slate-500 font-medium">Sistema:</span>
+                    <span className="font-mono font-bold text-slate-700">RD$ {item.systemAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-slate-500 font-medium">Terminal:</span>
+                    <span className="font-mono font-black text-rose-600">RD$ {item.reportedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              ))}
+              {cardTerminalAlerts.length > 3 && (
+                <button
+                  onClick={() => setShowAllCardTerminal(!showAllCardTerminal)}
+                  className="text-[10px] font-black text-indigo-600 uppercase hover:underline cursor-pointer"
+                >
+                  {showAllCardTerminal ? 'Ver menos' : `Ver todos (${cardTerminalAlerts.length})`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Alert 4: Upcoming Payables */}
         <div className="bg-white border border-slate-200/80 p-5 rounded-3xl shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -371,7 +414,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
           )}
         </div>
 
-        {/* Alert 4: Low Margin Products */}
+        {/* Alert 5: Low Margin Products */}
         <div className="bg-white border border-slate-200/80 p-5 rounded-3xl shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

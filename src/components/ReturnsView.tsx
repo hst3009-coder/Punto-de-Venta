@@ -169,6 +169,18 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
 
       await firestoreService.addDoc('supplierReturns', returnDoc);
 
+      try {
+        await firestoreService.addDoc('auditLogs', {
+          action: 'register_supplier_return',
+          description: `Devolución a proveedor registrada: ${qty}x ${getStringValue(selectedProduct.name)} a ${getStringValue(supplierName)} por RD$ ${cost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: currentEmployee?.name || 'Cajero',
+          createdAt: new Date().toISOString()
+        });
+      } catch (auditErr) {
+        console.error('Error logging register_supplier_return audit:', auditErr);
+      }
+
       await realAlert.showAlert('Éxito', 'La devolución se ha registrado correctamente y el stock ha sido actualizado.', 'success');
 
       setSupplierName('');
@@ -237,6 +249,18 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
       });
 
       await firestoreService.runBatch(operations);
+
+      try {
+        await firestoreService.addDoc('auditLogs', {
+          action: 'credit_supplier_return',
+          description: `Devolución acreditada para proveedor ${getStringValue(returnToCredit.supplierName)} por RD$ ${returnToCredit.cost.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${method === 'credit_note' ? 'Nota de Crédito' : 'Reembolso directo'})`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: currentEmployee?.name || 'Cajero',
+          createdAt: new Date().toISOString()
+        });
+      } catch (auditErr) {
+        console.error('Error logging credit_supplier_return audit:', auditErr);
+      }
 
       await realAlert.showAlert(
         'Devolución Acreditada',

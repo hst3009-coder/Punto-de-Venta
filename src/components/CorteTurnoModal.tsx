@@ -56,6 +56,9 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  const [cardTerminalMatched, setCardTerminalMatched] = useState<boolean | null>(null);
+  const [cardTerminalReportedAmountStr, setCardTerminalReportedAmountStr] = useState<string>('');
+
   const [cashMismatchAlert, setCashMismatchAlert] = useState<{ oldVal: number; newVal: number } | null>(null);
   const lastKnownExpectedCashRef = useRef<number | null>(null);
 
@@ -330,6 +333,8 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
       setIsTouched(false);
       setCashMismatchAlert(null);
       lastKnownExpectedCashRef.current = null;
+      setCardTerminalMatched(null);
+      setCardTerminalReportedAmountStr('');
     }
   }, [isOpen]);
 
@@ -376,6 +381,29 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
       return;
     }
 
+    if (salesMetrics.card > 0) {
+      if (cardTerminalMatched === null) {
+        await showAlert(
+          'Confirmación de Terminal Requerida',
+          `Por favor confirma si el cierre de la terminal de tarjetas coincidió con el monto del sistema (RD$ ${salesMetrics.card.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`,
+          'warning'
+        );
+        return;
+      }
+
+      if (cardTerminalMatched === false) {
+        const reportedAmt = parseFloat(cardTerminalReportedAmountStr);
+        if (!cardTerminalReportedAmountStr || isNaN(reportedAmt) || reportedAmt < 0) {
+          await showAlert(
+            'Monto de Terminal Requerido',
+            'Por favor ingresa el monto real que reportó la terminal de tarjetas.',
+            'warning'
+          );
+          return;
+        }
+      }
+    }
+
     try {
       setSaving(true);
       setSaveStatus(null);
@@ -383,7 +411,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
       const d = new Date();
       const dateString = d.toISOString().split('T')[0]; // YYYY-MM-DD
 
-      const closureData = {
+      const closureData: Omit<Closure, 'id'> = {
         date: dateString,
         clerkName,
         employeeId: currentEmployee?.id || undefined,
@@ -394,29 +422,67 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
         cashToRemove,
         difference: discrepancy,
         status: 'closed' as const,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ...(salesMetrics.card > 0 ? {
+          cardTerminalMatched: cardTerminalMatched === true,
+          cardTerminalSystemAmount: salesMetrics.card,
+          ...(cardTerminalMatched === false ? {
+            cardTerminalReportedAmount: parseFloat(cardTerminalReportedAmountStr) || 0
+          } : {})
+        } : {})
       };
 
       await firestoreService.addDoc('closures', closureData);
       
+      try {
+        await firestoreService.addDoc('auditLogs', {
+          action: 'close_shift',
+          description: `Corte de turno realizado por ${clerkName}. Efectivo real: RD$ ${actualCash.toFixed(2)}, Diferencia: RD$ ${discrepancy.toFixed(2)}${salesMetrics.card > 0 ? (cardTerminalMatched ? ' (Terminal Tarjetas concilio ok)' : ` (Terminal Tarjetas discrepancia: reportado RD$ ${parseFloat(cardTerminalReportedAmountStr).toFixed(2)} vs sistema RD$ ${salesMetrics.card.toFixed(2)})`) : ''}`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: clerkName || 'Cajero',
+          createdAt: new Date().toISOString()
+        });
+      } catch (auditErr) {
+        console.error('Error logging close_shift audit:', auditErr);
+      }
+
       setSaveStatus({
         text: 'Corte de caja registrado exitosamente en Firestore',
         type: 'success'
       });
 
-      // Imprimir reporte de cierre automáticamente
-      window.print();
+      // Imprimir reporte de cierre y realizar limpieza tras finalizar impresión o timeout de 4s
+      let cleanedUp = false;
+      let timerId: ReturnType<typeof setTimeout> | null = null;
 
-      // Clear actual count
-      setActualCashStr('');
-
-      setTimeout(() => {
+      const doCleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        if (timerId !== null) {
+          clearTimeout(timerId);
+          timerId = null;
+        }
+        window.removeEventListener('afterprint', handleAfterPrint);
+        setActualCashStr('');
+        setCardTerminalMatched(null);
+        setCardTerminalReportedAmountStr('');
         setSaveStatus(null);
         onClose();
         if (onSuccess) {
           onSuccess();
         }
-      }, 2000);
+      };
+
+      const handleAfterPrint = () => {
+        doCleanup();
+      };
+
+      timerId = setTimeout(() => {
+        doCleanup();
+      }, 4000);
+
+      window.addEventListener('afterprint', handleAfterPrint);
+      window.print();
 
     } catch (err: any) {
       console.error('Error saving closure:', err);
@@ -738,6 +804,71 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Card Terminal Confirmation */}
+          {salesMetrics.card > 0 && (
+            <div className="space-y-3 bg-slate-50 rounded-2xl border border-slate-200 p-4 print:hidden">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-indigo-600" />
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Confirmación de Terminal de Tarjetas
+                </h4>
+              </div>
+              
+              <p className="text-xs text-slate-700 font-medium leading-relaxed">
+                ¿Hiciste el cierre en la terminal de tarjetas y el monto coincidió con el sistema (RD$ {salesMetrics.card.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})?
+              </p>
+
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCardTerminalMatched(true);
+                    setCardTerminalReportedAmountStr('');
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    cardTerminalMatched === true
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-250 hover:bg-slate-100'
+                  }`}
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  Sí
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCardTerminalMatched(false);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    cardTerminalMatched === false
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-250 hover:bg-slate-100'
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  No
+                </button>
+              </div>
+
+              {cardTerminalMatched === false && (
+                <div className="pt-2 animate-fade-in space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-700 block">
+                    ¿Cuál fue el monto real que reportó la terminal? ($) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={cardTerminalReportedAmountStr}
+                    onChange={(e) => setCardTerminalReportedAmountStr(e.target.value)}
+                    placeholder="Monto real reportado por la terminal"
+                    className="w-full px-3 py-2 rounded-xl border-2 border-rose-300 bg-rose-50/30 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 placeholder:text-slate-400"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Warnings on discrepancy */}
           {actualCashStr && Math.abs(discrepancy) > 0.01 && (

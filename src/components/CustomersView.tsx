@@ -328,6 +328,18 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     try {
       await firestoreService.setDocWithId('customerPayments', paymentId, newPayment);
       
+      try {
+        await firestoreService.addDoc('auditLogs', {
+          action: 'register_payment',
+          description: `Abono registrado a cliente ${selectedCustomer.name}: RD$ ${amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${paymentMethod === 'cash' ? 'Efectivo' : paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'})`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: currentEmployee?.name || clerkName || 'Cajero',
+          createdAt: new Date().toISOString()
+        });
+      } catch (auditErr) {
+        console.error('Error logging register_payment audit for customer:', auditErr);
+      }
+      
       setPaymentAmountStr('');
       setPaymentMethod('cash');
       setSelectedBankAccountId('');

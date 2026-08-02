@@ -107,6 +107,17 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
       };
 
       await firestoreService.addDoc('movements', expenseData);
+      try {
+        await firestoreService.addDoc('auditLogs', {
+          action: 'register_expense',
+          description: `Egreso registrado: RD$ ${parsedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} - ${concept.trim()} (${activeCategory.trim()})`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: currentEmployee?.name || clerkName || 'Cajero',
+          createdAt: new Date().toISOString()
+        });
+      } catch (auditErr) {
+        console.error('Error logging register_expense audit:', auditErr);
+      }
       showAlert('Egreso registrado exitosamente', 'success');
       
       // Reset form

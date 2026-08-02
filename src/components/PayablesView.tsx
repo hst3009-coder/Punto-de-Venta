@@ -335,6 +335,18 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
 
       await firestoreService.runBatch(operations);
 
+      try {
+        await firestoreService.addDoc('auditLogs', {
+          action: 'register_payment',
+          description: `Abono a cuenta por pagar registrado para proveedor ${getStringValue(selectedPayable.supplierName)}: RD$ ${amt.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: currentEmployee?.name || 'Sistema',
+          createdAt: new Date().toISOString()
+        });
+      } catch (auditErr) {
+        console.error('Error logging register_payment audit for payable:', auditErr);
+      }
+
       await showAlert('Éxito', 'Pago registrado correctamente.', 'success');
       setPaymentAmount('');
       setSelectedBankAccountId('');

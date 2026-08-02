@@ -44,6 +44,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { PinLockScreen } from './components/PinLockScreen';
 import { ROLE_DEFAULT_PERMISSIONS } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
+import { useFirestoreData } from './hooks/useFirestoreData';
 import { useAlert } from './context/AlertContext';
 import {
   Search,
@@ -111,11 +112,44 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- Core State ---
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('pos_products');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // --- Core State & Real-time Firestore Hook ---
+  const {
+    products,
+    setProducts,
+    salesHistory,
+    setSalesHistory,
+    pendingSales,
+    setPendingSales,
+    customers,
+    setCustomers,
+    customerPayments,
+    setCustomerPayments,
+    customerRefunds,
+    setCustomerRefunds,
+    creditNotes,
+    setCreditNotes,
+    movements,
+    setMovements,
+    employees,
+    closures,
+    setClosures,
+    payables,
+    setPayables,
+    payablePayments,
+    setPayablePayments,
+    supplierReturns,
+    setSupplierReturns,
+    supplierCreditNotes,
+    setSupplierCreditNotes,
+    cardDeposits,
+    setCardDeposits,
+    storeIdentity,
+    setStoreIdentity,
+    dashboardConfig,
+    setDashboardConfig,
+    isSyncing,
+    dbQuotaExceeded,
+  } = useFirestoreData(!!authUser);
 
   const categories = useMemo(() => {
     const uniqueCats = new Set<string>();
@@ -154,11 +188,6 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [priceOverrideModalItem, setPriceOverrideModalItem] = useState<CartItem | null>(null);
   
-  const [salesHistory, setSalesHistory] = useState<Sale[]>(() => {
-    const saved = localStorage.getItem('pos_sales');
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const todaysSalesCount = useMemo(() => {
     const todayStr = new Date().toLocaleDateString('en-CA'); // "YYYY-MM-DD"
     return salesHistory.filter(sale => {
@@ -237,30 +266,6 @@ export default function App() {
     }, 300);
   };
 
-  const [storeIdentity, setStoreIdentity] = useState<StoreIdentity>(() => {
-    const saved = localStorage.getItem('pos_store_identity');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return {
-      id: 'store_identity',
-      name: 'MI NEGOCIO',
-      showNameOnInvoice: true,
-      slogan: 'Terminal de Punto de Venta Inteligente',
-      showSloganOnInvoice: true,
-      address: 'Av. Principal #123, Ciudad de México',
-      showAddressOnInvoice: true,
-      phone: '555-019-2834',
-      showPhoneOnInvoice: true,
-      logoUrl: '🛒',
-      showLogoOnInvoice: true,
-    };
-  });
-
   const handleUpdateIdentity = useCallback(async (updated: StoreIdentity) => {
     setStoreIdentity(updated);
     localStorage.setItem('pos_store_identity', JSON.stringify(updated));
@@ -269,23 +274,7 @@ export default function App() {
     } catch (err) {
       console.error('Error updating identity in Firestore:', err);
     }
-  }, []);
-
-  const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig>(() => {
-    const saved = localStorage.getItem('pos_dashboard_config');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return {
-      id: 'dashboardConfig',
-      cardFeePercent: 3.8,
-      holidays: [],
-    };
-  });
+  }, [setStoreIdentity]);
 
   const handleUpdateDashboardConfig = useCallback(async (updated: DashboardConfig) => {
     setDashboardConfig(updated);
@@ -295,7 +284,7 @@ export default function App() {
     } catch (err) {
       console.error('Error updating dashboard config in Firestore:', err);
     }
-  }, []);
+  }, [setDashboardConfig]);
 
   // --- Local Retry Queue for Failed Sales Syncs ---
   const [pendingSyncQueue, setPendingSyncQueue] = useState<PendingSyncSale[]>(() => {
@@ -356,18 +345,6 @@ export default function App() {
     return pendingSyncQueue.some((item) => now - (item.timestamp || now) > TWENTY_FOUR_HOURS);
   }, [pendingSyncQueue]);
 
-  const [pendingSales, setPendingSales] = useState<PendingSale[]>(() => {
-
-    const saved = localStorage.getItem('pos_pending_sales');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
   const [isSavingPending, setIsSavingPending] = useState(false);
   const [pendingRefName, setPendingRefName] = useState('');
   const [selectedProductForPackaging, setSelectedProductForPackaging] = useState<Product | null>(null);
@@ -377,18 +354,6 @@ export default function App() {
   };
 
   // --- Customers State ---
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('pos_customers');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
   const activeCustomer = useMemo(() => {
     return customers.find(c => c.id === selectedCustomerId) || null;
   }, [customers, selectedCustomerId]);
@@ -550,7 +515,6 @@ export default function App() {
   const [isCustomersOpen, setIsCustomersOpen] = useState(false);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [employees, setEmployees] = useState<Employee[]>([]);
 
   // --- Generic Product Modal States ---
   const [isGenericModalOpen, setIsGenericModalOpen] = useState(false);
@@ -561,131 +525,9 @@ export default function App() {
   // --- Expenses Modal Cash-Only State ---
   const [expensesForceCash, setExpensesForceCash] = useState(false);
 
-  const [movements, setMovements] = useState<Movement[]>(() => {
-    const saved = localStorage.getItem('pos_movements');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() => {
-    const saved = localStorage.getItem('pos_customer_payments');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [customerRefunds, setCustomerRefunds] = useState<CustomerRefund[]>(() => {
-    const saved = localStorage.getItem('pos_customer_refunds');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [creditNotes, setCreditNotes] = useState<CreditNote[]>(() => {
-    const saved = localStorage.getItem('pos_credit_notes');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [closures, setClosures] = useState<Closure[]>(() => {
-    const saved = localStorage.getItem('pos_closures');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [payables, setPayables] = useState<AccountPayable[]>(() => {
-    const saved = localStorage.getItem('pos_payables');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [cardDeposits, setCardDeposits] = useState<CardDeposit[]>(() => {
-    const saved = localStorage.getItem('pos_card_deposits');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [payablePayments, setPayablePayments] = useState<PayablePayment[]>(() => {
-    const saved = localStorage.getItem('pos_payable_payments');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [supplierReturns, setSupplierReturns] = useState<SupplierReturn[]>(() => {
-    const saved = localStorage.getItem('pos_supplier_returns');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
-  const [supplierCreditNotes, setSupplierCreditNotes] = useState<SupplierCreditNote[]>(() => {
-    const saved = localStorage.getItem('pos_supplier_credit_notes');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return [];
-  });
-
   const [showClerkInput, setShowClerkInput] = useState(false);
   const [tempClerkName, setTempClerkName] = useState(clerkName);
   const [recentTicket, setRecentTicket] = useState<Sale | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [dbQuotaExceeded, setDbQuotaExceeded] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -732,157 +574,10 @@ export default function App() {
     document.title = storeIdentity.name || 'Punto de Venta';
   }, [storeIdentity.name]);
 
-  // --- Real-time Firestore Sync Hooks ---
-  useEffect(() => {
-    if (!authUser) return;
-    setIsSyncing(true);
-    // Listen to live products from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<Product>(
-      'products',
-      (dbProducts) => {
-        setProducts(dbProducts);
-        setIsSyncing(false);
-      },
-      (err) => {
-        console.error('Firestore products subscription error:', err);
-        const errMsg = err.message || String(err);
-        if (errMsg.includes('Quota exceeded') || errMsg.includes('quota')) {
-          setDbQuotaExceeded(true);
-        }
-        setIsSyncing(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live sales from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<Sale>(
-      'sales',
-      (dbSales) => {
-        const sorted = [...dbSales].sort((a, b) => getSaleTimestamp(b) - getSaleTimestamp(a));
-        setSalesHistory(sorted);
-      },
-      (err) => {
-        console.error('Firestore sales subscription error:', err);
-        const errMsg = err.message || String(err);
-        if (errMsg.includes('Quota exceeded') || errMsg.includes('quota')) {
-          setDbQuotaExceeded(true);
-        }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to pending sales from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<PendingSale>(
-      'pending_sales',
-      (dbPending) => {
-        const sorted = [...dbPending].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        setPendingSales(sorted);
-        localStorage.setItem('pos_pending_sales', JSON.stringify(sorted));
-      },
-      (err) => {
-        console.error('Firestore pending sales subscription error:', err);
-        const errMsg = err.message || String(err);
-        if (errMsg.includes('Quota exceeded') || errMsg.includes('quota')) {
-          setDbQuotaExceeded(true);
-        }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live customers from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<Customer>(
-      'customers',
-      async (dbCustomers) => {
-        setCustomers(dbCustomers);
-        localStorage.setItem('pos_customers', JSON.stringify(dbCustomers));
-      },
-      (err) => {
-        console.error('Firestore customers subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live customer payments from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<CustomerPayment>(
-      'customerPayments',
-      (dbPayments) => {
-        setCustomerPayments(dbPayments);
-        localStorage.setItem('pos_customer_payments', JSON.stringify(dbPayments));
-      },
-      (err) => {
-        console.error('Firestore customer payments subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live customer refunds from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<CustomerRefund>(
-      'customerRefunds',
-      (dbRefunds) => {
-        setCustomerRefunds(dbRefunds);
-        localStorage.setItem('pos_customer_refunds', JSON.stringify(dbRefunds));
-      },
-      (err) => {
-        console.error('Firestore customer refunds subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
   const saveCreditNotesToStorage = (notes: CreditNote[]) => {
     const sanitized = notes.map(cn => ({ ...cn, code: undefined }));
     localStorage.setItem('pos_credit_notes', JSON.stringify(sanitized));
   };
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live credit notes from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<CreditNote>(
-      'creditNotes',
-      (dbNotes) => {
-        setCreditNotes(dbNotes);
-        saveCreditNotesToStorage(dbNotes);
-      },
-      (err) => {
-        console.error('Firestore credit notes subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    localStorage.setItem('pos_customer_payments', JSON.stringify(customerPayments));
-  }, [customerPayments]);
-
-  useEffect(() => {
-    localStorage.setItem('pos_customer_refunds', JSON.stringify(customerRefunds));
-  }, [customerRefunds]);
-
-  useEffect(() => {
-    saveCreditNotesToStorage(creditNotes);
-  }, [creditNotes]);
 
   const handleAddCustomerRefund = (refund: CustomerRefund) => {
     const updated = [refund, ...customerRefunds];
@@ -906,199 +601,6 @@ export default function App() {
       console.error('Error updating credit note in Firestore:', err);
     }
   };
-
-  useEffect(() => {
-    localStorage.setItem('pos_payables', JSON.stringify(payables));
-  }, [payables]);
-
-  useEffect(() => {
-    localStorage.setItem('pos_payable_payments', JSON.stringify(payablePayments));
-  }, [payablePayments]);
-
-  useEffect(() => {
-    localStorage.setItem('pos_supplier_returns', JSON.stringify(supplierReturns));
-  }, [supplierReturns]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live movements from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<Movement>(
-      'movements',
-      (dbMovements) => {
-        const sorted = [...dbMovements].sort((a, b) => {
-          const timeA = new Date(a.createdAt || a.date).getTime();
-          const timeB = new Date(b.createdAt || b.date).getTime();
-          return timeB - timeA;
-        });
-        setMovements(sorted);
-        localStorage.setItem('pos_movements', JSON.stringify(sorted));
-      },
-      (err) => {
-        console.error('Firestore movements subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    localStorage.setItem('pos_movements', JSON.stringify(movements));
-  }, [movements]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live employees from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<Employee>(
-      'employees',
-      (dbEmployees) => {
-        setEmployees(dbEmployees);
-      },
-      (err) => {
-        console.error('Firestore employees subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live closures from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<Closure>(
-      'closures',
-      (dbClosures) => {
-        const sorted = [...dbClosures].sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-        setClosures(sorted);
-        localStorage.setItem('pos_closures', JSON.stringify(sorted));
-      },
-      (err) => {
-        console.error('Firestore closures subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live accounts payable from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<AccountPayable>(
-      'accountsPayable',
-      (dbPayables) => {
-        setPayables(dbPayables);
-        localStorage.setItem('pos_payables', JSON.stringify(dbPayables));
-      },
-      (err) => {
-        console.error('Firestore accountsPayable subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live payable payments from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<PayablePayment>(
-      'payablePayments',
-      (dbPayments) => {
-        setPayablePayments(dbPayments);
-        localStorage.setItem('pos_payable_payments', JSON.stringify(dbPayments));
-      },
-      (err) => {
-        console.error('Firestore payablePayments subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live supplier returns from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<SupplierReturn>(
-      'supplierReturns',
-      (dbReturns) => {
-        setSupplierReturns(dbReturns);
-        localStorage.setItem('pos_supplier_returns', JSON.stringify(dbReturns));
-      },
-      (err) => {
-        console.error('Firestore supplierReturns subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live supplier credit notes from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<SupplierCreditNote>(
-      'supplierCreditNotes',
-      (dbNotes) => {
-        setSupplierCreditNotes(dbNotes);
-        localStorage.setItem('pos_supplier_credit_notes', JSON.stringify(dbNotes));
-      },
-      (err) => {
-        console.error('Firestore supplierCreditNotes subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to live card deposits from Firestore
-    const unsubscribe = firestoreService.subscribeToCollection<CardDeposit>(
-      'cardDeposits',
-      (dbDeposits) => {
-        setCardDeposits(dbDeposits);
-        localStorage.setItem('pos_card_deposits', JSON.stringify(dbDeposits));
-      },
-      (err) => {
-        console.error('Firestore cardDeposits subscription error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    // Listen to store identity from Firestore configs collection
-    const unsubscribe = firestoreService.subscribeToCollection<any>(
-      'configs',
-      (dbConfigs) => {
-        const identityDoc = dbConfigs.find((c) => c.id === 'store_identity');
-        if (identityDoc) {
-          setStoreIdentity(identityDoc);
-          localStorage.setItem('pos_store_identity', JSON.stringify(identityDoc));
-        } else {
-          // If Firestore configuration doesn't exist yet, seed it with current state
-          firestoreService.setDocWithId('configs', 'store_identity', storeIdentity);
-        }
-
-        const configDoc = dbConfigs.find((c) => c.id === 'dashboardConfig');
-        if (configDoc) {
-          setDashboardConfig(configDoc);
-          localStorage.setItem('pos_dashboard_config', JSON.stringify(configDoc));
-        } else {
-          // If Firestore dashboardConfig doesn't exist yet, seed it with default state
-          firestoreService.setDocWithId('configs', 'dashboardConfig', dashboardConfig);
-        }
-      },
-      (err) => {
-        console.error('Firestore configs subscription error:', err);
-        const errMsg = err.message || String(err);
-        if (errMsg.includes('Quota exceeded') || errMsg.includes('quota')) {
-          setDbQuotaExceeded(true);
-        }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser]);
 
   // --- Sync to LocalStorage (as offline fallback cache) ---
   useEffect(() => {

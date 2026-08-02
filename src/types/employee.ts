@@ -14,6 +14,9 @@ export interface Closure {
   pendingCashCount?: boolean;
   closedByAdminId?: string;
   closedByAdminName?: string;
+  cardTerminalMatched?: boolean;
+  cardTerminalReportedAmount?: number;
+  cardTerminalSystemAmount?: number;
 }
 
 export interface EmployeePermissions {

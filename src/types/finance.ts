@@ -157,7 +157,15 @@ export interface StoreIdentity {
 
 export interface AuditLogEntry {
   id: string;
-  action: 'close_shift_admin' | 'void_credit_note' | 'change_permissions';
+  action: 
+    | 'close_shift_admin' 
+    | 'void_credit_note' 
+    | 'change_permissions'
+    | 'confirm_bank_deposit'
+    | 'register_supplier_return'
+    | 'credit_supplier_return'
+    | 'register_expense'
+    | 'register_payment';
   description: string; // texto legible, ej. "Cerró el turno de Juan Pérez (pendiente de contar)"
   employeeId?: string;
   employeeName?: string;

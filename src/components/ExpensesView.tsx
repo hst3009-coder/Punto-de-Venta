@@ -243,6 +243,17 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       };
 
       await firestoreService.addDoc('movements', expenseData);
+      try {
+        await firestoreService.addDoc('auditLogs', {
+          action: 'register_expense',
+          description: `Egreso del Dashboard registrado: RD$ ${parsedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} - ${getStringValue(concept).trim()} (${getStringValue(activeCategory).trim()})`,
+          employeeId: currentEmployee?.id || '',
+          employeeName: currentEmployee?.name || 'Administrador',
+          createdAt: new Date().toISOString()
+        });
+      } catch (auditErr) {
+        console.error('Error logging register_expense audit:', auditErr);
+      }
       showAlert('Egreso del Dashboard registrado con éxito', 'success');
 
       // Reset Form & Close Modal
