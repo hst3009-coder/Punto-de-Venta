@@ -28,6 +28,7 @@ import {
   SupplierReturn,
   CustomerRefund,
   CreditNote,
+  isMixedSale,
 } from '../types';
 import { getCustomerDebt } from '../lib/customerDebt';
 import { getPayableBalance, getTotalPayablesBalance } from '../lib/payableDebt';
@@ -221,7 +222,7 @@ export function useDashboardKPIs({
 
       if (sale.paymentMethod === 'cash') {
         return acc + sale.total;
-      } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+      } else if (isMixedSale(sale)) {
         const cashPart = sale.paymentBreakdown
           .filter((b) => b.method === 'cash')
           .reduce((sum, b) => sum + b.amount, 0);
@@ -275,7 +276,7 @@ export function useDashboardKPIs({
       .filter((s) => !s.isCancelled)
       .reduce((acc, s) => {
         if (s.paymentMethod === 'transfer') return acc + s.total;
-        if (s.paymentMethod === 'mixed' && s.paymentBreakdown) {
+        if (isMixedSale(s)) {
           const tPart = s.paymentBreakdown
             .filter((b) => b.method === 'transfer')
             .reduce((sum, b) => sum + b.amount, 0);
@@ -415,7 +416,7 @@ export function useDashboardKPIs({
         let cashPart = 0;
         if (sale.paymentMethod === 'cash') {
           cashPart = sale.total;
-        } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+        } else if (isMixedSale(sale)) {
           cashPart = sale.paymentBreakdown
             .filter((b) => b.method === 'cash')
             .reduce((sum, b) => sum + b.amount, 0);
@@ -550,7 +551,7 @@ export function useDashboardKPIs({
       credit: 0,
     };
     filteredSales.forEach((s) => {
-      if (s.paymentMethod === 'mixed' && s.paymentBreakdown && s.paymentBreakdown.length > 0) {
+      if (isMixedSale(s)) {
         s.paymentBreakdown.forEach((b) => {
           const method = getStringValue(b.method, 'cash');
           const amt = Number(b.amount || 0);
@@ -974,7 +975,7 @@ export function useDashboardKPIs({
 
     modalSales.forEach((sale) => {
       total += sale.total;
-      if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown && sale.paymentBreakdown.length > 0) {
+      if (isMixedSale(sale)) {
         mixed += sale.total;
         sale.paymentBreakdown.forEach((b) => {
           if (b.method === 'cash') cash += b.amount;
@@ -1003,7 +1004,7 @@ export function useDashboardKPIs({
         let creditAmount = 0;
         if (sale.paymentMethod === 'credit' || sale.isCredit) {
           creditAmount = sale.total;
-        } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+        } else if (isMixedSale(sale)) {
           creditAmount = sale.paymentBreakdown
             .filter((b) => b.method === 'credit')
             .reduce((sum, b) => sum + b.amount, 0);

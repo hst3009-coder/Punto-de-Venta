@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { CartItem, PaymentMethod, PaymentBreakdownItem, Sale, StoreIdentity, Customer, CustomerPayment, DashboardConfig, CustomerRefund, CreditNote } from '../types';
 import { X, Check, CreditCard, Wallet, QrCode, Coins, Printer, RefreshCw, Users, Layers, Plus, Trash2, AlertCircle, Tag } from 'lucide-react';
 import { roundCents } from '../lib/money';
@@ -467,17 +468,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   };
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F1') {
-        e.preventDefault();
+  useKeyboardShortcuts(
+    {
+      F1: () => {
         handleConfirmPayment(true);
-      } else if (e.key === 'F2') {
-        e.preventDefault();
+      },
+      F2: () => {
         handleConfirmPayment(false);
-      } else if (e.key === 'ArrowRight') {
+      },
+      ArrowRight: (e) => {
         e.preventDefault();
         const methods: PaymentMethod[] = selectedCustomerId
           ? ['cash', 'card', 'transfer', 'qr', 'credit', 'mixed']
@@ -487,7 +486,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           const nextIndex = (currentIndex + 1) % methods.length;
           setPaymentMethod(methods[nextIndex]);
         }
-      } else if (e.key === 'ArrowLeft') {
+      },
+      ArrowLeft: (e) => {
         e.preventDefault();
         const methods: PaymentMethod[] = selectedCustomerId
           ? ['cash', 'card', 'transfer', 'qr', 'credit', 'mixed']
@@ -497,12 +497,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           const prevIndex = (currentIndex - 1 + methods.length) % methods.length;
           setPaymentMethod(methods[prevIndex]);
         }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, paymentMethod, amountPaid, isValidAmount, selectedCustomerId, cartItems, total, selectedBankAccountId, mixedBreakdown, mixedTotalEntered]);
+      },
+    },
+    isOpen
+  );
 
   if (!isOpen) return null;
 

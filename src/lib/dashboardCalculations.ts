@@ -1,4 +1,4 @@
-import { Sale, Product, Customer, CustomerPayment, Closure, Movement, CustomerRefund, AccountPayable, PayablePayment, CardDeposit, DashboardConfig, Employee } from '../types';
+import { Sale, Product, Customer, CustomerPayment, Closure, Movement, CustomerRefund, AccountPayable, PayablePayment, CardDeposit, DashboardConfig, Employee, isMixedSale } from '../types';
 import { getSaleTimestamp } from './dates';
 import { getPreTaxAmount, roundCents, isProductBelowTargetProfit } from './money';
 import { getCustomerDebt } from './customerDebt';
@@ -88,7 +88,7 @@ export function calculateCashLiquidityTotal(
     const pm = getStringValue(sale.paymentMethod, 'cash');
     if (pm === 'cash') {
       return acc + sale.total;
-    } else if (pm === 'mixed' && sale.paymentBreakdown) {
+    } else if (isMixedSale(sale)) {
       const cashPart = sale.paymentBreakdown
         .filter(b => getStringValue(b.method) === 'cash')
         .reduce((sum, b) => sum + b.amount, 0);
@@ -146,7 +146,7 @@ export function calculateBankLiquidityTotal(
     .reduce((acc, s) => {
       const pm = getStringValue(s.paymentMethod);
       if (pm === 'transfer') return acc + s.total;
-      if (pm === 'mixed' && s.paymentBreakdown) {
+      if (isMixedSale(s)) {
         const tPart = s.paymentBreakdown
           .filter(b => getStringValue(b.method) === 'transfer')
           .reduce((sum, b) => sum + b.amount, 0);

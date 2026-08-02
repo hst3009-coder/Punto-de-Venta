@@ -23,7 +23,8 @@ export function LoginScreen({ storeIdentity, onLoginSuccess, initialError }: Log
       // Client-side verification of authorized email
       if (user && user.email) {
         const emailLower = user.email.toLowerCase();
-        if (emailLower === 'hst.30.09@gmail.com') {
+        const authorizedEmail = (import.meta.env.VITE_AUTHORIZED_EMAIL || 'hst.30.09@gmail.com').toLowerCase();
+        if (emailLower === authorizedEmail) {
           onLoginSuccess(user);
         } else {
           // Sign out unauthorized user immediately

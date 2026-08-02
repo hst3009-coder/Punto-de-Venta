@@ -1,4 +1,4 @@
-import { Sale, CustomerPayment, Customer, CustomerRefund } from '../types';
+import { Sale, CustomerPayment, Customer, CustomerRefund, isMixedSale } from '../types';
 
 export function getCustomerDebt(
   customerId: string,
@@ -13,7 +13,7 @@ export function getCustomerDebt(
   const creditSalesSum = sales
     .filter(s => s.customerId === customerId && s.creditStatus === 'pending')
     .reduce((acc, s) => {
-      if (s.paymentMethod === 'mixed' && s.paymentBreakdown) {
+      if (isMixedSale(s)) {
         const creditPart = s.paymentBreakdown
           .filter(b => b.method === 'credit')
           .reduce((sum, b) => sum + b.amount, 0);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote, ProductPackaging, PendingSyncSale, BatchOperation } from './types';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { Product, Category, CartItem, Sale, StoreIdentity, PendingSale, Employee, Customer, CustomerPayment, Closure, EmployeePermissions, Movement, AccountPayable, PayablePayment, DashboardConfig, CardDeposit, SupplierReturn, CustomerRefund, CreditNote, SupplierCreditNote, ProductPackaging, PendingSyncSale, BatchOperation, isMixedSale } from './types';
 import { PRODUCTS, CATEGORIES } from './data/products';
 import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
@@ -96,7 +97,8 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = authService.onAuthChange(async (user) => {
       if (user) {
-        if (user.email && user.email.toLowerCase() === 'hst.30.09@gmail.com') {
+        const authorizedEmail = (import.meta.env.VITE_AUTHORIZED_EMAIL || 'hst.30.09@gmail.com').toLowerCase();
+        if (user.email && user.email.toLowerCase() === authorizedEmail) {
           setAuthUser(user);
           setAuthError(null);
         } else {
@@ -774,69 +776,48 @@ export default function App() {
     }
   }, [cart, selectedCartItemId]);
 
-  // --- Keyboard Shortcuts & Barcode Listeners ---
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // If payment modal is open, ignore global app shortcuts
-      if (isPaymentOpen) {
-        // We still allow Escape to close the modal if it's not handled by the modal itself,
-        // but the user said "all app level shortcuts (F1... F12) should be IGNORED completely".
-        if (e.key === 'F1' || e.key === 'F3' || e.key === 'F4' || e.key === 'F6' || e.key === 'F10' || e.key === 'F12') {
-          e.preventDefault();
-          return;
-        }
-        // If Escape is pressed and isPaymentOpen is true, let it fall through to the Esc handler below
-        // which closes all modals, or we could handle it specifically here.
-        // The instructions say: "Escape can continue to work to close the payment modal if that logic already exists".
-      }
-
-      const activeEl = document.activeElement;
-      const isInput = activeEl && (
-        activeEl.tagName === 'INPUT' || 
-        activeEl.tagName === 'TEXTAREA' || 
-        activeEl.getAttribute('contenteditable') === 'true'
-      );
-
-      // Focus search: F10 or Ctrl + K with priority over browser
-      if (e.key === 'F10' || (e.ctrlKey && e.key === 'k')) {
+  // --- Keyboard Shortcuts ---
+  useKeyboardShortcuts(
+    {
+      F10: (e) => {
+        if (isPaymentOpen) return;
         e.preventDefault();
-        setSearchQuery(''); // Clear what was written on F10
+        setSearchQuery('');
         searchInputRef.current?.focus();
-        return;
-      }
-      // Toggle Products view with F3 (priority over browser search/find)
-      if (e.key === 'F3') {
+      },
+      'ctrl+k': (e) => {
+        if (isPaymentOpen) return;
+        e.preventDefault();
+        setSearchQuery('');
+        searchInputRef.current?.focus();
+      },
+      F3: (e) => {
+        if (isPaymentOpen) return;
         e.preventDefault();
         setIsProductsManagerOpen((prev) => !prev);
-        return;
-      }
-      // Toggle Customers view with F4
-      if (e.key === 'F4') {
+      },
+      F4: (e) => {
+        if (isPaymentOpen) return;
         e.preventDefault();
         setIsCustomersOpen((prev) => !prev);
-        return;
-      }
-      // Toggle Corte de Turno with F6
-      if (e.key === 'F6') {
+      },
+      F6: (e) => {
+        if (isPaymentOpen) return;
         e.preventDefault();
         setIsCorteOpen((prev) => !prev);
-        return;
-      }
-      // Go back to POS with F1
-      if (e.key === 'F1') {
+      },
+      F1: (e) => {
+        if (isPaymentOpen) return;
         e.preventDefault();
         setIsProductsManagerOpen(false);
         setIsCustomersOpen(false);
-        return;
-      }
-      // Open Payment modal: F12 with priority over browser
-      if (e.key === 'F12') {
+      },
+      F12: (e) => {
+        if (isPaymentOpen) return;
         e.preventDefault();
         if (cart.length > 0) setIsPaymentOpen(true);
-        return;
-      }
-      // Esc to close drawers and modals with priority
-      if (e.key === 'Escape') {
+      },
+      Escape: (e) => {
         e.preventDefault();
         setIsPaymentOpen(false);
         setIsAdminOpen(false);
@@ -846,34 +827,17 @@ export default function App() {
         setIsProductsManagerOpen(false);
         setIsCustomersOpen(false);
         setIsExpensesOpen(false);
-        return;
-      }
-
-      // If typing in any input element, ignore navigational/increment hotkeys
-      if (isInput) {
-        // Special exception: if active element is the search input and searchQuery is empty,
-        // we want '+' and '-' to be handled by cart navigation, not typed!
-        const isSearchInput = activeEl === searchInputRef.current;
-        if (isSearchInput && searchQuery.trim() === '') {
-          if (e.key === '+' || e.key === '=' || e.key === '-') {
-            // let it pass through to the cart handlers below
-          } else {
-            return;
-          }
-        } else {
-          return;
-        }
-      } else {
-        // If not in an input, and typing a printable key, focus the search input!
-        const isPrintableKey = e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && e.key !== '+' && e.key !== '-' && e.key !== '=' && e.key !== ' ';
-        if (isPrintableKey && searchInputRef.current) {
-          searchInputRef.current.focus();
-        }
-      }
-
-      // Cart Navigation using Arrow keys
-      if (cart.length > 0) {
-        if (e.key === 'ArrowDown') {
+      },
+      ArrowDown: (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (isInput) return;
+        if (cart.length > 0) {
           e.preventDefault();
           const currentIndex = cart.findIndex((item) => item.product.id === selectedCartItemId);
           if (currentIndex === -1) {
@@ -882,7 +846,18 @@ export default function App() {
             const nextIndex = (currentIndex + 1) % cart.length;
             setSelectedCartItemId(cart[nextIndex].product.id);
           }
-        } else if (e.key === 'ArrowUp') {
+        }
+      },
+      ArrowUp: (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (isInput) return;
+        if (cart.length > 0) {
           e.preventDefault();
           const currentIndex = cart.findIndex((item) => item.product.id === selectedCartItemId);
           if (currentIndex === -1) {
@@ -891,35 +866,107 @@ export default function App() {
             const prevIndex = (currentIndex - 1 + cart.length) % cart.length;
             setSelectedCartItemId(cart[prevIndex].product.id);
           }
-        } else if (e.key === '+' || e.key === '=') {
-          if (selectedCartItemId) {
-            e.preventDefault();
-            handleIncrementQuantity(selectedCartItemId);
-          }
-        } else if (e.key === '-') {
-          if (selectedCartItemId) {
-            e.preventDefault();
-            handleDecrementQuantity(selectedCartItemId);
-          }
-        } else if (e.key === 'Delete' || e.key === 'Backspace') {
-          if (selectedCartItemId) {
-            e.preventDefault();
-            handleRemoveFromCart(selectedCartItemId);
+        }
+      },
+      '+': (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (isInput) {
+          const isSearchInput = activeEl === searchInputRef.current;
+          if (!(isSearchInput && searchQuery.trim() === '')) return;
+        }
+        if (cart.length > 0 && selectedCartItemId) {
+          e.preventDefault();
+          handleIncrementQuantity(selectedCartItemId);
+        }
+      },
+      '=': (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (isInput) {
+          const isSearchInput = activeEl === searchInputRef.current;
+          if (!(isSearchInput && searchQuery.trim() === '')) return;
+        }
+        if (cart.length > 0 && selectedCartItemId) {
+          e.preventDefault();
+          handleIncrementQuantity(selectedCartItemId);
+        }
+      },
+      '-': (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (isInput) {
+          const isSearchInput = activeEl === searchInputRef.current;
+          if (!(isSearchInput && searchQuery.trim() === '')) return;
+        }
+        if (cart.length > 0 && selectedCartItemId) {
+          e.preventDefault();
+          handleDecrementQuantity(selectedCartItemId);
+        }
+      },
+      Delete: (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (isInput) return;
+        if (cart.length > 0 && selectedCartItemId) {
+          e.preventDefault();
+          handleRemoveFromCart(selectedCartItemId);
+        }
+      },
+      Backspace: (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (isInput) return;
+        if (cart.length > 0 && selectedCartItemId) {
+          e.preventDefault();
+          handleRemoveFromCart(selectedCartItemId);
+        }
+      },
+    },
+    {
+      enabled: true,
+      onUnhandledKey: (e) => {
+        if (isPaymentOpen) return;
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.getAttribute('contenteditable') === 'true'
+        );
+        if (!isInput) {
+          const isPrintableKey = e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey && e.key !== '+' && e.key !== '-' && e.key !== '=' && e.key !== ' ';
+          if (isPrintableKey && searchInputRef.current) {
+            searchInputRef.current.focus();
           }
         }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    cart,
-    selectedCartItemId,
-    handleIncrementQuantity,
-    handleDecrementQuantity,
-    handleRemoveFromCart,
-    searchQuery,
-    setSearchQuery
-  ]);
+      },
+    }
+  );
 
   // --- Keep Search Input Focused in Sales View ---
   useEffect(() => {
@@ -1116,7 +1163,7 @@ export default function App() {
     let updatedCreditNotes = [...creditNotes];
     const creditNoteBatchOps: Array<{ id: string; remainingBalance: number; status: 'active' | 'depleted' | 'voided' }> = [];
 
-    if (saleWithEmployee.paymentBreakdown && saleWithEmployee.paymentBreakdown.length > 0) {
+    if (isMixedSale(saleWithEmployee)) {
       const cnRows = saleWithEmployee.paymentBreakdown.filter(b => b.method === 'credit_note' && (b.amount || 0) > 0);
       for (const row of cnRows) {
         const applied = roundCents(Number(row.amount) || 0);

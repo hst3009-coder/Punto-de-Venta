@@ -45,6 +45,16 @@ export interface Sale {
   bankAccountId?: string;
 }
 
+export function isMixedSale(
+  sale: Sale
+): sale is Sale & { paymentBreakdown: NonNullable<Sale['paymentBreakdown']> } {
+  return (
+    sale.paymentMethod === 'mixed' &&
+    Array.isArray(sale.paymentBreakdown) &&
+    sale.paymentBreakdown.length > 0
+  );
+}
+
 export interface CreditNote {
   id: string;
   code: string; // código corto único, ej. 8 caracteres alfanuméricos en mayúscula

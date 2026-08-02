@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Employee, Closure, Sale, Movement, AuditLogEntry } from '../types';
+import { Employee, Closure, Sale, Movement, AuditLogEntry, isMixedSale } from '../types';
 import { getSaleTimestamp } from '../lib/dates';
 import { firestoreService } from '../lib/firebase';
 import { usePermissions } from './usePermissions';
@@ -74,7 +74,7 @@ export function useAdminShiftManager({
 
         const empCashSalesSum = empSales.reduce((acc, s) => {
           if (s.paymentMethod === 'cash') return acc + s.total;
-          if (s.paymentMethod === 'mixed' && s.paymentBreakdown) {
+          if (isMixedSale(s)) {
             const cashPart = s.paymentBreakdown
               .filter((b) => b.method === 'cash')
               .reduce((sum, b) => sum + b.amount, 0);

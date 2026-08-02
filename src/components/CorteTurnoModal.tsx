@@ -13,7 +13,7 @@ import {
   HelpCircle,
   Users
 } from 'lucide-react';
-import { Sale, Employee, Closure, Movement, CustomerRefund, DashboardConfig } from '../types';
+import { Sale, Employee, Closure, Movement, CustomerRefund, DashboardConfig, isMixedSale } from '../types';
 import { firestoreService } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAlert } from '../context/AlertContext';
@@ -135,12 +135,12 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
 
     todaySales.forEach(sale => {
       total += sale.total;
-      if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown && sale.paymentBreakdown.length > 0) {
+      if (isMixedSale(sale)) {
         sale.paymentBreakdown.forEach(b => {
           if (b.method === 'cash') cash += b.amount;
           else if (b.method === 'card') card += b.amount;
           else if (b.method === 'transfer') transfer += b.amount;
-          else if (b.method === 'qr') qr += b.amount;
+          else if ((b.method as string) === 'qr') qr += b.amount;
           else if (b.method === 'credit') credit += b.amount;
         });
       } else if (sale.paymentMethod === 'cash') {
@@ -166,7 +166,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
         let creditAmount = 0;
         if (sale.paymentMethod === 'credit') {
           creditAmount = sale.total;
-        } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+        } else if (isMixedSale(sale)) {
           creditAmount = sale.paymentBreakdown
             .filter(b => b.method === 'credit')
             .reduce((sum, b) => sum + b.amount, 0);

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { format } from 'date-fns';
-import { Sale, CardDeposit, DashboardConfig } from '../types';
+import { Sale, CardDeposit, DashboardConfig, isMixedSale } from '../types';
 import { getNextBusinessDay } from '../lib/businessDays';
 import { roundCents } from '../lib/money';
 import { firestoreService } from '../lib/firebase';
@@ -36,7 +36,7 @@ export function useCardDepositGenerator({
           const dateStr = sale.createdAt.substring(0, 10); // YYYY-MM-DD
           if (sale.paymentMethod === 'card') {
             cardSalesByDate[dateStr] = (cardSalesByDate[dateStr] || 0) + sale.total;
-          } else if (sale.paymentMethod === 'mixed' && sale.paymentBreakdown) {
+          } else if (isMixedSale(sale)) {
             const cardAmount = sale.paymentBreakdown
               .filter((b) => b.method === 'card')
               .reduce((sum, b) => sum + b.amount, 0);
