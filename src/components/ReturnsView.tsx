@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Product, SupplierReturn, SupplierCreditNote, AccountPayable, Employee } from '../types';
 import { SupplierPicker } from './SupplierPicker';
 import { firestoreService } from '../lib/firebase';
+import { increment } from 'firebase/firestore';
 import { useAlert } from '../context/AlertContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { getStringValue } from '../lib/normalize';
@@ -145,14 +146,12 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
       );
       if (!confirmSave) return;
 
-      const newStock = Math.max(0, selectedProduct.stock - qty);
-
       await firestoreService.runBatch([
         {
           type: 'update',
           collectionName: 'products',
           id: selectedProduct.id,
-          data: { stock: newStock }
+          data: { stock: increment(-qty) }
         }
       ]);
 
