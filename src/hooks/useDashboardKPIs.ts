@@ -290,8 +290,18 @@ export function useDashboardKPIs({
       .filter((p) => p.paymentMethod === 'card' || p.paymentMethod === 'transfer')
       .reduce((acc, p) => acc + p.amount, 0);
 
-    return roundCents(confirmedCardDepositsSum + transferSalesSum + bankCustomerPaymentsSum);
-  }, [cardDeposits, sales, customerPayments]);
+    const transferExpensesSum = movements
+      .filter((m) => m.type === 'out' && m.paymentMethod === 'transfer')
+      .reduce((acc, m) => acc + m.amount, 0);
+
+    const transferPayablePaymentsSum = payablePayments
+      .filter((p) => p.paymentMethod === 'transfer')
+      .reduce((acc, p) => acc + p.amount, 0);
+
+    return roundCents(
+      confirmedCardDepositsSum + transferSalesSum + bankCustomerPaymentsSum - transferExpensesSum - transferPayablePaymentsSum
+    );
+  }, [cardDeposits, sales, customerPayments, movements, payablePayments]);
 
   // --- P&L Report Data ---
   const plReportData = useMemo(() => {

@@ -315,6 +315,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
           expenseType: 'pago_factura',
           amount: amt,
           concept: `Pago a proveedor: ${getStringValue(selectedPayable.supplierName)}`,
+          supplierName: getStringValue(selectedPayable.supplierName).trim(),
           category: 'Suministros',
           paymentMethod: 'cash',
           clerkName: currentEmployee?.name || 'Sistema',

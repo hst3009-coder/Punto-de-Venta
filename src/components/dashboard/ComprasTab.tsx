@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Product,
+  Sale,
   PurchaseOrder,
   PurchaseOrderItem,
   PurchaseReceipt,
@@ -11,6 +12,7 @@ import {
 import { SupplierPicker } from '../SupplierPicker';
 import { firestoreService, BatchOperation } from '../../lib/firebase';
 import { increment } from 'firebase/firestore';
+import { getRestockSuggestions, RestockSuggestion } from '../../lib/restockSuggestions';
 import {
   Truck,
   Plus,
@@ -40,6 +42,7 @@ export interface DraftOrderGroup {
 
 interface ComprasTabProps {
   products: Product[];
+  sales?: Sale[];
   purchaseOrders: PurchaseOrder[];
   purchaseReceipts: PurchaseReceipt[];
   payables?: AccountPayable[];
@@ -53,6 +56,7 @@ interface ComprasTabProps {
 
 export const ComprasTab: React.FC<ComprasTabProps> = ({
   products,
+  sales = [],
   purchaseOrders,
   purchaseReceipts,
   payables = [],
@@ -64,6 +68,23 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
   onClearDrafts,
 }) => {
   const canManage = permissions.managePurchaseOrders ?? permissions.manageProducts;
+
+  // Compute restock suggestions for items needing restock (< 7 days coverage)
+  const restockSuggestions = useMemo(() => {
+    return getRestockSuggestions(products, sales || []);
+  }, [products, sales]);
+
+  const suggestionsBySupplier = useMemo(() => {
+    const groups: Record<string, RestockSuggestion[]> = {};
+    for (const sug of restockSuggestions) {
+      const providerKey = sug.product.provider?.trim() || 'Sin Proveedor asignado';
+      if (!groups[providerKey]) {
+        groups[providerKey] = [];
+      }
+      groups[providerKey].push(sug);
+    }
+    return groups;
+  }, [restockSuggestions]);
 
   // Search and status filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,6 +103,38 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
 
   // Draft queue from restock suggestions
   const [draftQueue, setDraftQueue] = useState<DraftOrderGroup[]>(initialDraftOrders || []);
+
+  const handleSupplierChange = (supplierName: string) => {
+    setNewSupplier(supplierName);
+    if (supplierName.trim()) {
+      const matching = restockSuggestions.filter(
+        (s) => s.product.provider?.trim().toLowerCase() === supplierName.trim().toLowerCase()
+      );
+      if (matching.length > 0 && newItems.length === 0) {
+        setNewItems(
+          matching.map((s) => ({
+            productId: s.product.id,
+            productName: s.product.name,
+            quantityOrdered: s.suggestedQty,
+            estimatedCost: s.product.cost || 0,
+          }))
+        );
+      }
+    }
+  };
+
+  const handleSelectSupplierGroup = (supplierName: string, items: RestockSuggestion[]) => {
+    const actualSupplier = supplierName === 'Sin Proveedor asignado' ? '' : supplierName;
+    setNewSupplier(actualSupplier);
+    setNewItems(
+      items.map((s) => ({
+        productId: s.product.id,
+        productName: s.product.name,
+        quantityOrdered: s.suggestedQty,
+        estimatedCost: s.product.cost || 0,
+      }))
+    );
+  };
 
   React.useEffect(() => {
     if (initialDraftOrders && initialDraftOrders.length > 0) {
@@ -684,12 +737,89 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                 </label>
                 <SupplierPicker
                   value={newSupplier}
-                  onChange={setNewSupplier}
+                  onChange={handleSupplierChange}
                   products={products}
                   payables={payables}
                   placeholder="Selecciona o escribe el proveedor..."
                 />
               </div>
+
+              {/* Restock suggestions helper when supplier is selected */}
+              {newSupplier.trim() && (() => {
+                const matching = restockSuggestions.filter(
+                  (s) => s.product.provider?.trim().toLowerCase() === newSupplier.trim().toLowerCase()
+                );
+                if (matching.length === 0) return null;
+                return (
+                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-amber-900 shadow-2xs">
+                    <div className="flex items-center gap-2 font-medium">
+                      <Package className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>
+                        Hay <strong>{matching.length}</strong> {matching.length === 1 ? 'producto' : 'productos'} de <strong className="font-bold">{newSupplier}</strong> con stock bajo (&lt; 7 días).
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const preloaded = matching.map((s) => ({
+                          productId: s.product.id,
+                          productName: s.product.name,
+                          quantityOrdered: s.suggestedQty,
+                          estimatedCost: s.product.cost || 0,
+                        }));
+                        setNewItems(preloaded);
+                      }}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    >
+                      {newItems.length === 0 ? 'Cargar Sugeridos' : 'Reemplazar con Sugeridos'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Restock suggestions grouped by supplier when NO supplier selected yet */}
+              {!newSupplier.trim() && restockSuggestions.length > 0 && (
+                <div className="p-4 bg-gradient-to-br from-amber-50/90 to-orange-50/90 border border-amber-200 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-amber-600" />
+                    <h4 className="text-xs font-black text-amber-950 uppercase tracking-tight">
+                      Sugerencias de Reabastecimiento (&lt; 7 días de inventario)
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    Selecciona un proveedor para iniciar una orden precargada con sus productos agotándose:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-52 overflow-y-auto pr-1">
+                    {(Object.entries(suggestionsBySupplier) as [string, RestockSuggestion[]][]).map(([suppName, items]) => (
+                      <div
+                        key={suppName}
+                        className="p-3 bg-white border border-amber-200/90 hover:border-amber-400 rounded-xl shadow-2xs flex flex-col justify-between gap-2 transition-all"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between font-bold text-xs text-slate-800 mb-1">
+                            <span>{suppName}</span>
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 font-extrabold text-[10px] rounded-full">
+                              {items.length} {items.length === 1 ? 'prod.' : 'prods.'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 space-y-0.5 line-clamp-2">
+                            {items.map((s) => `${s.product.name} (Stock: ${s.product.stock || 0}, Sug: ${s.suggestedQty})`).join(', ')}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSupplierGroup(suppName, items)}
+                          className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] rounded-lg transition-colors cursor-pointer text-center"
+                        >
+                          Crear orden con estos productos
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Product search and addition */}
               <div className="space-y-3">
@@ -718,8 +848,16 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                       >
                         <div>
                           <div className="text-xs font-bold text-slate-800">{prod.name}</div>
-                          <div className="text-[10px] text-slate-400">
-                            Stock actual: {prod.stock} | Costo estim: RD$ {(prod.cost || 0).toFixed(2)}
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                            <span>Stock actual: {prod.stock}</span>
+                            <span>•</span>
+                            <span>Costo estim: RD$ {(prod.cost || 0).toFixed(2)}</span>
+                            {prod.provider && (
+                              <>
+                                <span>•</span>
+                                <span className="text-amber-700 font-semibold">Prov: {prod.provider}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                         <span className="px-2.5 py-1 bg-indigo-600 text-white font-bold rounded-lg text-[10px]">
@@ -746,53 +884,71 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                   </div>
                 ) : (
                   <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
-                    {newItems.map((item) => (
-                      <div key={item.productId} className="p-3 bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="text-xs font-bold text-slate-800">{item.productName}</div>
+                    {newItems.map((item) => {
+                      const prod = products.find((p) => p.id === item.productId);
+                      const prodProvider = prod?.provider?.trim();
+                      const orderSupplier = newSupplier.trim();
+                      const isDifferentSupplier =
+                        Boolean(prodProvider) &&
+                        Boolean(orderSupplier) &&
+                        prodProvider!.toLowerCase() !== orderSupplier.toLowerCase();
+
+                      return (
+                        <div key={item.productId} className="p-3 bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-slate-800">{item.productName}</span>
+                              {isDifferentSupplier && (
+                                <span className="px-2 py-0.5 bg-amber-100 border border-amber-300 text-amber-800 text-[10px] font-extrabold rounded-md flex items-center gap-1 shadow-2xs">
+                                  <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                                  Proveedor distinto: {prodProvider}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <label className="block text-[9px] font-black uppercase text-slate-400">Cant.</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.quantityOrdered}
+                                onChange={(e) => handleItemQtyChange(item.productId, parseInt(e.target.value))}
+                                className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-black uppercase text-slate-400">Costo Estim. (RD$)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={item.estimatedCost}
+                                onChange={(e) => handleItemCostChange(item.productId, parseFloat(e.target.value))}
+                                className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800"
+                              />
+                            </div>
+
+                            <div className="text-right w-24">
+                              <label className="block text-[9px] font-black uppercase text-slate-400">Subtotal</label>
+                              <span className="text-xs font-mono font-bold text-slate-900">
+                                RD$ {(item.quantityOrdered * item.estimatedCost).toFixed(2)}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProductFromOrder(item.productId)}
+                              className="p-1 hover:bg-rose-100 rounded-lg text-rose-500 transition-colors cursor-pointer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <label className="block text-[9px] font-black uppercase text-slate-400">Cant.</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={item.quantityOrdered}
-                              onChange={(e) => handleItemQtyChange(item.productId, parseInt(e.target.value))}
-                              className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[9px] font-black uppercase text-slate-400">Costo Estim. (RD$)</label>
-                            <input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={item.estimatedCost}
-                              onChange={(e) => handleItemCostChange(item.productId, parseFloat(e.target.value))}
-                              className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800"
-                            />
-                          </div>
-
-                          <div className="text-right w-24">
-                            <label className="block text-[9px] font-black uppercase text-slate-400">Subtotal</label>
-                            <span className="text-xs font-mono font-bold text-slate-900">
-                              RD$ {(item.quantityOrdered * item.estimatedCost).toFixed(2)}
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveProductFromOrder(item.productId)}
-                            className="p-1 hover:bg-rose-100 rounded-lg text-rose-500 transition-colors cursor-pointer"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

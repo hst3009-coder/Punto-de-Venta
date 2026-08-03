@@ -152,6 +152,7 @@ export interface Movement {
   createdAt?: string;
   expenseType?: 'gasto' | 'pago_factura';
   invoiceNumber?: string;
+  supplierName?: string;
   isOperational?: boolean;
   source?: 'shift' | 'dashboard';
 }

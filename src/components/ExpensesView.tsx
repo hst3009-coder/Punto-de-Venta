@@ -22,6 +22,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { Movement, Employee, DashboardConfig } from '../types';
+import { SupplierPicker } from './SupplierPicker';
 import { firestoreService } from '../lib/firebase';
 import { getStringValue } from '../lib/normalize';
 import { useAlert } from '../context/AlertContext';
@@ -69,6 +70,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [amount, setAmount] = useState<string>('');
   const [concept, setConcept] = useState<string>('');
+  const [supplierName, setSupplierName] = useState<string>('');
   const [category, setCategory] = useState<string>('Servicios');
   const [customCategory, setCustomCategory] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
@@ -147,11 +149,12 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         if (searchTerm.trim()) {
           const term = searchTerm.toLowerCase();
           const conceptMatch = getStringValue(m.concept).toLowerCase().includes(term);
+          const supplierMatch = getStringValue(m.supplierName).toLowerCase().includes(term);
           const invoiceMatch = getStringValue(m.invoiceNumber).toLowerCase().includes(term);
           const catMatch = getStringValue(m.category).toLowerCase().includes(term);
           const clerkMatch = getStringValue(m.clerkName || m.employeeName).toLowerCase().includes(term);
           const amountMatch = m.amount.toString().includes(term);
-          if (!conceptMatch && !invoiceMatch && !catMatch && !clerkMatch && !amountMatch) return false;
+          if (!conceptMatch && !supplierMatch && !invoiceMatch && !catMatch && !clerkMatch && !amountMatch) return false;
         }
 
         return true;
@@ -206,7 +209,12 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       return;
     }
 
-    if (!getStringValue(concept).trim()) {
+    if (expenseType === 'pago_factura' && !getStringValue(supplierName).trim()) {
+      showAlert('Por favor seleccione o ingrese el proveedor para el pago de factura', 'error');
+      return;
+    }
+
+    if (expenseType === 'gasto' && !getStringValue(concept).trim()) {
       showAlert('Por favor ingrese un concepto para el egreso', 'error');
       return;
     }
@@ -224,10 +232,14 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
     setIsSubmitting(true);
     try {
+      const finalConcept = expenseType === 'pago_factura'
+        ? `Pago a ${getStringValue(supplierName).trim()}`
+        : getStringValue(concept).trim();
+
       const expenseData = {
         type: 'out' as const,
         amount: parsedAmount,
-        concept: getStringValue(concept).trim(),
+        concept: finalConcept,
         category: getStringValue(activeCategory).trim(),
         paymentMethod,
         bankAccountId: paymentMethod === 'transfer' ? (bankAccountId || undefined) : undefined,
@@ -238,6 +250,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         createdAt: new Date().toISOString(),
         expenseType,
         invoiceNumber: expenseType === 'pago_factura' && getStringValue(invoiceNumber).trim() ? getStringValue(invoiceNumber).trim() : undefined,
+        supplierName: expenseType === 'pago_factura' ? getStringValue(supplierName).trim() : undefined,
         isOperational: expenseType === 'pago_factura' ? true : isOperational,
         source: 'dashboard' as const
       };
@@ -246,7 +259,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       try {
         await firestoreService.addDoc('auditLogs', {
           action: 'register_expense',
-          description: `Egreso del Dashboard registrado: RD$ ${parsedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} - ${getStringValue(concept).trim()} (${getStringValue(activeCategory).trim()})`,
+          description: `Egreso del Dashboard registrado: RD$ ${parsedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} - ${finalConcept} (${getStringValue(activeCategory).trim()})`,
           employeeId: currentEmployee?.id || '',
           employeeName: currentEmployee?.name || 'Administrador',
           createdAt: new Date().toISOString()
@@ -259,6 +272,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       // Reset Form & Close Modal
       setAmount('');
       setConcept('');
+      setSupplierName('');
       setCategory('Servicios');
       setCustomCategory('');
       setPaymentMethod('cash');
@@ -558,7 +572,13 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                       {/* Concept & Category */}
                       <td className="py-3 px-4">
                         <div className="font-bold text-slate-800 max-w-xs truncate">
-                          {getStringValue(m.concept)}
+                          {m.supplierName ? (
+                            <span>
+                              Pago a <strong className="text-slate-900 font-extrabold">{getStringValue(m.supplierName)}</strong>
+                            </span>
+                          ) : (
+                            getStringValue(m.concept)
+                          )}
                           {m.expenseType === 'pago_factura' && getStringValue(m.invoiceNumber) && (
                             <span className="text-indigo-600 font-bold normal-case ml-1">
                               — Factura #{getStringValue(m.invoiceNumber)}
@@ -724,20 +744,47 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Concepto */}
-                <div>
-                  <label className="text-xs font-black uppercase text-slate-500 tracking-wider block mb-1.5">
-                    Concepto / Descripción
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={concept}
-                    onChange={e => setConcept(e.target.value)}
-                    placeholder="Ej. Pago de servicio de internet, compra de resma de papel..."
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-                  />
-                </div>
+                {/* Concepto / Proveedor y # Factura */}
+                {expenseType === 'pago_factura' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-black uppercase text-slate-500 tracking-wider block mb-1.5">
+                        Proveedor <span className="text-rose-500">*</span>
+                      </label>
+                      <SupplierPicker
+                        value={supplierName}
+                        onChange={setSupplierName}
+                        placeholder="Selecciona o escribe el proveedor..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-black uppercase text-slate-500 tracking-wider block mb-1.5">
+                        # Factura (opcional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. 1234, FACT-0092..."
+                        value={invoiceNumber}
+                        onChange={e => setInvoiceNumber(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-xs font-black uppercase text-slate-500 tracking-wider block mb-1.5">
+                      Concepto / Descripción
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={concept}
+                      onChange={e => setConcept(e.target.value)}
+                      placeholder="Ej. Pago de servicio de internet, compra de resma de papel..."
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                    />
+                  </div>
+                )}
 
                 {/* Categoría */}
                 <div>
@@ -875,21 +922,6 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                     </select>
                   </div>
                 </div>
-
-                {expenseType === 'pago_factura' && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">
-                      # Factura (opcional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej. 1234, FACT-0092..."
-                      value={invoiceNumber}
-                      onChange={e => setInvoiceNumber(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-xs text-slate-800 focus:bg-white focus:border-rose-500 focus:outline-hidden"
-                    />
-                  </motion.div>
-                )}
 
                 {/* Actions */}
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
