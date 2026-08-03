@@ -128,16 +128,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ currentEmployee })
     try {
       // Duplicate PIN validation
       if (isPinRequired) {
-        for (const otherEmp of employees) {
-          if (isEditing && otherEmp.id === editingId) continue;
-          if (!otherEmp.pinHash || !otherEmp.pinSalt) continue;
-          
-          const isMatch = await verifyPin(pin, otherEmp.pinHash, otherEmp.pinSalt);
-          if (isMatch) {
-            setError(`Este PIN ya está en uso por ${otherEmp.name}. Elige un PIN diferente.`);
-            setSubmitting(false);
-            return;
-          }
+        const otherEmployees = employees.filter(emp => !(isEditing && emp.id === editingId) && emp.pinHash && emp.pinSalt);
+        const pinCheckResults = await Promise.all(
+          otherEmployees.map(async (emp) => {
+            const isMatch = await verifyPin(pin, emp.pinHash!, emp.pinSalt!);
+            return { emp, isMatch };
+          })
+        );
+        const duplicateEmp = pinCheckResults.find(res => res.isMatch)?.emp;
+        if (duplicateEmp) {
+          setError(`Este PIN ya está en uso por ${duplicateEmp.name}. Elige un PIN diferente.`);
+          setSubmitting(false);
+          return;
         }
       }
 
@@ -163,7 +165,19 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ currentEmployee })
           }
         }
         const targetEmp = employees.find(emp => emp.id === editingId);
-        const permissionsChanged = !targetEmp || JSON.stringify(targetEmp.permissions) !== JSON.stringify(permissions);
+        const targetPerms = targetEmp?.permissions;
+        let permissionsChanged = !targetPerms;
+        if (targetPerms) {
+          const allPermissionKeys = Array.from(
+            new Set([
+              ...Object.keys(targetPerms),
+              ...Object.keys(permissions)
+            ])
+          ) as (keyof EmployeePermissions)[];
+          permissionsChanged = allPermissionKeys.some(
+            key => Boolean(targetPerms[key]) !== Boolean(permissions[key])
+          );
+        }
 
         const updateData: any = {
           name,

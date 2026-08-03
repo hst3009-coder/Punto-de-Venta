@@ -376,29 +376,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     // 2. Print handling
     if (shouldPrint && !hasCreditComponent) {
-      let cleanedUp = false;
-      let timerId: ReturnType<typeof setTimeout> | null = null;
-
-      const handleAfterPrint = () => {
-        if (cleanedUp) return;
-        cleanedUp = true;
-        if (timerId !== null) {
-          clearTimeout(timerId);
-          timerId = null;
-        }
-        window.removeEventListener('afterprint', handleAfterPrint);
-        onClose();
-      };
-
-      timerId = setTimeout(() => {
-        if (cleanedUp) return;
-        cleanedUp = true;
-        window.removeEventListener('afterprint', handleAfterPrint);
-        onClose();
-      }, 3000);
-
-      window.addEventListener('afterprint', handleAfterPrint);
       window.print();
+      onClose();
     } else if (shouldPrint) {
       window.print();
     }

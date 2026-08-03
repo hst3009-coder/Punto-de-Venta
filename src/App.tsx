@@ -1783,7 +1783,10 @@ export default function App() {
 
           {permissions.registerExpenses && (
             <button
-              onClick={() => setIsExpensesOpen(true)}
+              onClick={() => {
+                setExpensesForceCash(true);
+                setIsExpensesOpen(true);
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl font-medium text-rose-700 transition-colors cursor-pointer shadow-xs"
               title="Registrar Egresos de Caja"
             >
@@ -1912,7 +1915,7 @@ export default function App() {
         {/* Cart List Container */}
         <div 
           ref={cartListRef}
-          className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 bg-white"
+          className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 bg-white"
         >
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-16 px-4">
@@ -2019,21 +2022,6 @@ export default function App() {
                   <span>💳 Tarjeta Exacta</span>
                 </button>
               </div>
-            )}
-
-            {permissions.registerExpenses && (
-              <button
-                type="button"
-                onClick={() => {
-                  setExpensesForceCash(true);
-                  setIsExpensesOpen(true);
-                }}
-                className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 hover:text-rose-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer mb-1"
-                title="Registrar una salida rápida de efectivo del cajón de dinero"
-              >
-                <TrendingDown className="w-4 h-4 text-rose-600" />
-                <span>Salida de Efectivo</span>
-              </button>
             )}
 
             {/* Main Action Trigger */}

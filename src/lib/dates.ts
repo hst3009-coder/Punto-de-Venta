@@ -27,5 +27,6 @@ export function getSaleTimestamp(sale: { date: string; createdAt?: string }): nu
     }
   }
 
+  console.warn('getSaleTimestamp: no se pudo determinar la fecha de esta venta', { saleId: (sale as any).id, sale });
   return 0;
 }

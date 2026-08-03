@@ -790,6 +790,12 @@ export const DatabaseControlCenter: React.FC<DatabaseControlCenterProps> = ({
                         className="w-full px-3.5 py-2 rounded-xl border border-slate-250 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                     )}
+
+                    {selectedCol.key === 'products' && f.name === 'stock' && (
+                      <p className="mt-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg leading-relaxed">
+                        ⚠️ Editar el stock aquí no protege contra ventas simultáneas en otras terminales — para ajustes de inventario, usa mejor 'Agregar Stock' o 'Inventariar' en Gestión de Productos, que sí están protegidos contra pérdida de datos por uso concurrente.
+                      </p>
+                    )}
                   </div>
                 ))}
 
