@@ -9,6 +9,10 @@ export interface SaleTotals {
   rawTotal: number;
 }
 
+/**
+ * Calculates sale totals (subtotal, tax, total, rawTotal)
+ * given cart items where item.product.price is already the effective unit price.
+ */
 export function calculateSaleTotals(items: CartItem[]): SaleTotals {
   let totalSubtotal = 0;
   let totalTax = 0;

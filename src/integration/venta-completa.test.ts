@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { increment } from 'firebase/firestore';
 import { CartItem, Product, Sale, CreditNote } from '../types';
 import { calculateSaleTotals, buildSaleBatchOperations, processSaleBatch } from '../lib/saleProcessor';
+import { getEffectiveItemInfo } from '../lib/bulkPricing';
 
 describe('Integration Test: Flujo Completo de Venta Compleja', () => {
   it('procesa correctamente una venta mixta (Efectivo + Nota de Crédito) con productos gravados y exentos', async () => {
@@ -56,8 +57,25 @@ describe('Integration Test: Flujo Completo de Venta Compleja', () => {
       },
     ];
 
-    // 4. Verificación de Cálculos Matemáticos (Subtotal, ITBIS, Total)
-    const totals = calculateSaleTotals(cartItems);
+    // 4. Transformar carrito con precios efectivos (igual que App.tsx) y verificar cálculos
+    const effectiveCart: CartItem[] = cartItems.map((item) => {
+      const info = getEffectiveItemInfo(
+        item.product,
+        item.quantity,
+        null,
+        item.selectedPackaging,
+        item.priceOverride
+      );
+      return {
+        ...item,
+        product: {
+          ...item.product,
+          price: info.unitPrice,
+        },
+      };
+    });
+
+    const totals = calculateSaleTotals(effectiveCart);
 
     expect(totals.rawTotal).toBe(536); // 236 + 300 = 536
     expect(totals.subtotal).toBe(500); // 200 + 300 = 500
@@ -75,7 +93,7 @@ describe('Integration Test: Flujo Completo de Venta Compleja', () => {
     const saleData: Sale = {
       id: 'sale_complex_999',
       ticketNumber: 'TKT-999888',
-      items: cartItems,
+      items: effectiveCart,
       total: totals.total,
       paymentMethod: 'mixed',
       paymentBreakdown: [

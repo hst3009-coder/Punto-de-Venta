@@ -4,6 +4,7 @@ import { Sale, CardDeposit, DashboardConfig, isMixedSale } from '../types';
 import { getNextBusinessDay } from '../lib/businessDays';
 import { roundCents } from '../lib/money';
 import { firestoreService } from '../lib/firebase';
+import { getSaleTimestamp } from '../lib/dates';
 
 interface UseCardDepositGeneratorProps {
   isOpen: boolean;
@@ -28,12 +29,16 @@ export function useCardDepositGenerator({
       isProcessingRef.current = true;
 
       try {
+        const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+        const recentSales = sales.filter((sale) => getSaleTimestamp(sale) >= fourteenDaysAgo);
+
         // 1. Group sales by YYYY-MM-DD
         const cardSalesByDate: Record<string, number> = {};
 
-        sales.forEach((sale) => {
-          if (!sale.createdAt) return;
-          const dateStr = sale.createdAt.substring(0, 10); // YYYY-MM-DD
+        recentSales.forEach((sale) => {
+          const timestamp = getSaleTimestamp(sale);
+          if (!timestamp) return;
+          const dateStr = format(new Date(timestamp), 'yyyy-MM-dd'); // YYYY-MM-DD
           if (sale.paymentMethod === 'card') {
             cardSalesByDate[dateStr] = (cardSalesByDate[dateStr] || 0) + sale.total;
           } else if (isMixedSale(sale)) {

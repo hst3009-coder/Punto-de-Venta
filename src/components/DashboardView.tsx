@@ -215,6 +215,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     closures,
     sales,
     movements,
+    dashboardConfig,
     showAlert,
     showConfirm,
   });

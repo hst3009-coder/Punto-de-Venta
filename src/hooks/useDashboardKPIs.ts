@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { calculateABCClassification } from '../lib/abcAnalysis';
 import * as XLSX from 'xlsx';
 import {
   startOfDay,
@@ -1165,11 +1166,44 @@ export function useDashboardKPIs({
       });
     });
 
+    const { abcMap, productRevenues } = calculateABCClassification(visibleProducts, sales);
+
+    const abcProducts = visibleProducts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      emoji: (p as any).emoji || '📦',
+      stock: p.stock,
+      minStock: p.minStock,
+      cost: p.cost,
+      abcClass: abcMap.get(p.id) || 'C',
+      revenue: productRevenues.get(p.id) || 0,
+    })).sort((a, b) => {
+      const order = { A: 1, B: 2, C: 3 };
+      if (order[a.abcClass] !== order[b.abcClass]) {
+        return order[a.abcClass] - order[b.abcClass];
+      }
+      return b.revenue - a.revenue;
+    });
+
+    const abcSummary = {
+      A: { count: 0, value: 0 },
+      B: { count: 0, value: 0 },
+      C: { count: 0, value: 0 },
+    };
+
+    abcProducts.forEach((p) => {
+      abcSummary[p.abcClass].count += 1;
+      abcSummary[p.abcClass].value += p.stock * (p.cost || 0);
+    });
+
     return {
       totalValue,
       lowStockCount,
       outOfStockCount,
       productSalesMap,
+      abcProducts,
+      abcSummary,
     };
   }, [products, sales]);
 

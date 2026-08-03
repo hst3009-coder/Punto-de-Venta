@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Product, Category, EmployeePermissions, Sale, DashboardConfig } from '../../types';
 import { matchesProductSearch, rankSearchResults } from '../../lib/search';
+import { calculateABCClassification } from '../../lib/abcAnalysis';
 import { getSaleTimestamp } from '../../lib/dates';
 import * as XLSX from 'xlsx';
 import { useAlert } from '../../context/AlertContext';
@@ -75,6 +76,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
   // Compute recentSalesCount map for the last 30 days
   const recentSalesCount = useMemo(() => {
     const map = new Map<string, number>();
+    if (!sales) return map;
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     sales.forEach((sale) => {
       if (sale.isCancelled) return;
@@ -90,6 +92,32 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
     });
     return map;
   }, [sales]);
+
+  const monthlySalesCount = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!sales) return map;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    sales.forEach((sale) => {
+      if (sale.isCancelled) return;
+      const sDate = new Date(getSaleTimestamp(sale));
+      if (sDate.getFullYear() === currentYear && sDate.getMonth() === currentMonth) {
+        sale.items?.forEach((item) => {
+          if (item.product?.id) {
+            const current = map.get(item.product.id) || 0;
+            map.set(item.product.id, current + (item.quantity || 1));
+          }
+        });
+      }
+    });
+    return map;
+  }, [sales]);
+
+  const abcAnalysis = useMemo(() => {
+    return calculateABCClassification(products, sales || []);
+  }, [products, sales]);
   
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -232,16 +260,20 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
 
   // Filter products by search & category
   const filteredProducts = useMemo(() => {
-    const filtered = products.filter((prod) => {
-       const matchesSearch = matchesProductSearch(prod, searchQuery);
-       const prodCat = getStringValue(prod.category).trim().toLowerCase();
-       const matchesCategory = selectedCategory === 'all' || 
-         (prodCat !== '' && prodCat === selectedCategory.toLowerCase());
-       return matchesSearch && matchesCategory;
-     });
- 
-     return rankSearchResults(filtered, searchQuery, recentSalesCount);
-   }, [products, searchQuery, selectedCategory, recentSalesCount]);
+    const visibleCategoryProducts = products.filter((prod) => {
+      const prodCat = getStringValue(prod.category).trim().toLowerCase();
+      return selectedCategory === 'all' || (prodCat !== '' && prodCat === selectedCategory.toLowerCase());
+    });
+
+    return rankSearchResults(
+      visibleCategoryProducts,
+      searchQuery,
+      recentSalesCount,
+      monthlySalesCount,
+      abcAnalysis.abcMap,
+      abcAnalysis.hasHistory
+    );
+  }, [products, searchQuery, selectedCategory, recentSalesCount, monthlySalesCount, abcAnalysis]);
 
   // Sort filtered products
   const sortedProducts = useMemo(() => {
@@ -366,43 +398,94 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
     const val = parseFloat(batchPriceValue);
     if (isNaN(val)) return;
 
-    const confirmed = await showConfirm(
-      'Actualizar Precios',
-      `¿Aplicar el cambio de precio a ${selectedIds.length} productos seleccionados?`
-    );
+    const failingProducts: { prod: Product; newPrice: number; marginPct: number }[] = [];
+    const validOps: { id: string; newPrice: number; prod: Product }[] = [];
 
-    if (confirmed) {
-      try {
-        const ops = selectedIds.map(id => {
-          const prod = products.find(p => p.id === id)!;
-          let newPrice = prod.price;
-          if (batchPriceMode === 'fixed') {
-            newPrice = val;
-          } else {
-            newPrice = roundCents(prod.price * (1 + val / 100));
-          }
-          
-          return {
-            type: 'update' as const,
-            collectionName: 'products',
-            id,
-            data: { price: newPrice }
-          };
-        });
-        await firestoreService.runBatch(ops);
-        
-        ops.forEach(op => {
-          const prod = products.find(p => p.id === op.id)!;
-          onAddProduct({ ...prod, price: op.data!.price });
-        });
+    selectedIds.forEach((id) => {
+      const prod = products.find((p) => p.id === id);
+      if (!prod) return;
 
-        setSelectedIds([]);
-        setBatchActionMenu(null);
-        setBatchPriceValue('');
-        showAlert('Éxito', `${selectedIds.length} precios actualizados.`, 'success');
-      } catch (err) {
-        console.error("Error in batch price update:", err);
+      let newPrice = prod.price;
+      if (batchPriceMode === 'fixed') {
+        newPrice = val;
+      } else {
+        newPrice = roundCents(prod.price * (1 + val / 100));
       }
+
+      const cost = prod.cost || 0;
+      let fails = false;
+      let marginPct = 0;
+
+      if (cost > 0) {
+        const preTax = getPreTaxAmount(newPrice, prod.taxExempt);
+        marginPct = ((preTax - cost) / cost) * 100;
+        if (marginPct < 15) {
+          fails = true;
+        }
+      }
+
+      if (fails) {
+        failingProducts.push({ prod, newPrice, marginPct });
+      } else {
+        validOps.push({ id, newPrice, prod });
+      }
+    });
+
+    let opsToApply = validOps;
+
+    if (failingProducts.length > 0) {
+      const productListStr = failingProducts
+        .map(
+          (item) =>
+            `• ${item.prod.name}: Nuevo precio RD$ ${item.newPrice.toFixed(2)} (Costo RD$ ${(item.prod.cost || 0).toFixed(2)}, Margen: ${item.marginPct.toFixed(1)}%)`
+        )
+        .join('\n');
+
+      if (validOps.length === 0) {
+        await showAlert(
+          'Margen Mínimo Insuficiente (15%)',
+          `Ninguno de los ${selectedIds.length} productos seleccionados cumple con el margen mínimo del 15% sobre el costo:\n\n${productListStr}`,
+          'error'
+        );
+        return;
+      }
+
+      const confirmed = await showConfirm(
+        'Margen Mínimo Insuficiente (15%)',
+        `Los siguientes ${failingProducts.length} producto(s) quedarían por debajo del margen mínimo del 15% sobre el costo:\n\n${productListStr}\n\n¿Deseas excluirlos automáticamente y aplicar el cambio de precio solo a los ${validOps.length} producto(s) válidos?`,
+        'Excluir y Continuar',
+        'Cancelar'
+      );
+
+      if (!confirmed) return;
+    } else {
+      const confirmed = await showConfirm(
+        'Actualizar Precios',
+        `¿Aplicar el cambio de precio a ${selectedIds.length} productos seleccionados?`
+      );
+      if (!confirmed) return;
+    }
+
+    try {
+      const ops = opsToApply.map((op) => ({
+        type: 'update' as const,
+        collectionName: 'products',
+        id: op.id,
+        data: { price: op.newPrice },
+      }));
+
+      await firestoreService.runBatch(ops);
+
+      opsToApply.forEach((op) => {
+        onAddProduct({ ...op.prod, price: op.newPrice });
+      });
+
+      setSelectedIds([]);
+      setBatchActionMenu(null);
+      setBatchPriceValue('');
+      showAlert('Éxito', `${opsToApply.length} precios actualizados.`, 'success');
+    } catch (err) {
+      console.error('Error in batch price update:', err);
     }
   };
 

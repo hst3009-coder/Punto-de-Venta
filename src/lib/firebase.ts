@@ -166,7 +166,7 @@ export const firestoreService = {
     }
   },
 
-  // Run a batch of set/update operations atomically
+  // Run a batch of set/update operations atomically (auto-chunked if > 450 ops)
   async runBatch(operations: Array<{
     type: 'set' | 'update' | 'delete';
     collectionName: string;
@@ -174,29 +174,49 @@ export const firestoreService = {
     data?: any;
     merge?: boolean;
   }>) {
-    try {
-      const batch = writeBatch(db);
-      const now = new Date().toISOString();
-      for (const op of operations) {
-        const docRef = doc(db, op.collectionName, op.id);
-        if (op.type === 'set') {
-          batch.set(docRef, {
-            ...op.data,
-            updatedAt: now
-          }, { merge: op.merge !== false });
-        } else if (op.type === 'update') {
-          batch.update(docRef, {
-            ...op.data,
-            updatedAt: now
-          });
-        } else if (op.type === 'delete') {
-          batch.delete(docRef);
+    if (operations.length === 0) return;
+
+    const CHUNK_SIZE = 450;
+    const chunks: Array<typeof operations> = [];
+    for (let i = 0; i < operations.length; i += CHUNK_SIZE) {
+      chunks.push(operations.slice(i, i + CHUNK_SIZE));
+    }
+
+    let completedChunks = 0;
+    const totalChunks = chunks.length;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      try {
+        const batch = writeBatch(db);
+        const now = new Date().toISOString();
+        for (const op of chunk) {
+          const docRef = doc(db, op.collectionName, op.id);
+          if (op.type === 'set') {
+            batch.set(docRef, {
+              ...op.data,
+              updatedAt: now
+            }, { merge: op.merge !== false });
+          } else if (op.type === 'update') {
+            batch.update(docRef, {
+              ...op.data,
+              updatedAt: now
+            });
+          } else if (op.type === 'delete') {
+            batch.delete(docRef);
+          }
         }
+        await batch.commit();
+        completedChunks++;
+      } catch (error) {
+        console.error(`Error committing write batch (lote ${i + 1}/${totalChunks}, completados: ${completedChunks}):`, error);
+        if (completedChunks > 0) {
+          throw new Error(
+            `Fallo en el lote ${i + 1} de ${totalChunks} en la ejecución por lotes (${completedChunks} lote(s) completado(s) previamente). Error: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+        throw error;
       }
-      await batch.commit();
-    } catch (error) {
-      console.error("Error committing write batch:", error);
-      throw error;
     }
   }
 };

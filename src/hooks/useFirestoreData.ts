@@ -22,6 +22,7 @@ import {
 } from '../types';
 import { firestoreService } from '../lib/firebase';
 import { getSaleTimestamp } from '../lib/dates';
+import { useDebouncedLocalStorageWrite } from './useDebouncedLocalStorageWrite';
 
 const DEFAULT_STORE_IDENTITY: StoreIdentity = {
   id: 'store_identity',
@@ -218,7 +219,6 @@ export function useFirestoreData(enabled: boolean) {
       'customers',
       (dbCustomers) => {
         setCustomers(dbCustomers);
-        localStorage.setItem('pos_customers', JSON.stringify(dbCustomers));
       },
       (err) => {
         console.error('Firestore customers subscription error:', err);
@@ -230,7 +230,6 @@ export function useFirestoreData(enabled: boolean) {
       'customerPayments',
       (dbPayments) => {
         setCustomerPayments(dbPayments);
-        localStorage.setItem('pos_customer_payments', JSON.stringify(dbPayments));
       },
       (err) => {
         console.error('Firestore customer payments subscription error:', err);
@@ -242,7 +241,6 @@ export function useFirestoreData(enabled: boolean) {
       'customerRefunds',
       (dbRefunds) => {
         setCustomerRefunds(dbRefunds);
-        localStorage.setItem('pos_customer_refunds', JSON.stringify(dbRefunds));
       },
       (err) => {
         console.error('Firestore customer refunds subscription error:', err);
@@ -254,7 +252,6 @@ export function useFirestoreData(enabled: boolean) {
       'creditNotes',
       (dbNotes) => {
         setCreditNotes(dbNotes);
-        saveCreditNotesToStorage(dbNotes);
       },
       (err) => {
         console.error('Firestore credit notes subscription error:', err);
@@ -271,7 +268,6 @@ export function useFirestoreData(enabled: boolean) {
           return timeB - timeA;
         });
         setMovements(sorted);
-        localStorage.setItem('pos_movements', JSON.stringify(sorted));
       },
       (err) => {
         console.error('Firestore movements subscription error:', err);
@@ -297,7 +293,6 @@ export function useFirestoreData(enabled: boolean) {
           (a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
         );
         setClosures(sorted);
-        localStorage.setItem('pos_closures', JSON.stringify(sorted));
       },
       (err) => {
         console.error('Firestore closures subscription error:', err);
@@ -309,7 +304,6 @@ export function useFirestoreData(enabled: boolean) {
       'accountsPayable',
       (dbPayables) => {
         setPayables(dbPayables);
-        localStorage.setItem('pos_payables', JSON.stringify(dbPayables));
       },
       (err) => {
         console.error('Firestore accountsPayable subscription error:', err);
@@ -321,7 +315,6 @@ export function useFirestoreData(enabled: boolean) {
       'payablePayments',
       (dbPayments) => {
         setPayablePayments(dbPayments);
-        localStorage.setItem('pos_payable_payments', JSON.stringify(dbPayments));
       },
       (err) => {
         console.error('Firestore payablePayments subscription error:', err);
@@ -333,7 +326,6 @@ export function useFirestoreData(enabled: boolean) {
       'supplierReturns',
       (dbReturns) => {
         setSupplierReturns(dbReturns);
-        localStorage.setItem('pos_supplier_returns', JSON.stringify(dbReturns));
       },
       (err) => {
         console.error('Firestore supplierReturns subscription error:', err);
@@ -345,7 +337,6 @@ export function useFirestoreData(enabled: boolean) {
       'supplierCreditNotes',
       (dbNotes) => {
         setSupplierCreditNotes(dbNotes);
-        localStorage.setItem('pos_supplier_credit_notes', JSON.stringify(dbNotes));
       },
       (err) => {
         console.error('Firestore supplierCreditNotes subscription error:', err);
@@ -357,7 +348,6 @@ export function useFirestoreData(enabled: boolean) {
       'cardDeposits',
       (dbDeposits) => {
         setCardDeposits(dbDeposits);
-        localStorage.setItem('pos_card_deposits', JSON.stringify(dbDeposits));
       },
       (err) => {
         console.error('Firestore cardDeposits subscription error:', err);
@@ -372,7 +362,6 @@ export function useFirestoreData(enabled: boolean) {
           (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
         );
         setPurchaseOrders(sorted);
-        localStorage.setItem('pos_purchase_orders', JSON.stringify(sorted));
       },
       (err) => {
         console.error('Firestore purchaseOrders subscription error:', err);
@@ -387,7 +376,6 @@ export function useFirestoreData(enabled: boolean) {
           (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
         );
         setPurchaseReceipts(sorted);
-        localStorage.setItem('pos_purchase_receipts', JSON.stringify(sorted));
       },
       (err) => {
         console.error('Firestore purchaseReceipts subscription error:', err);
@@ -401,7 +389,6 @@ export function useFirestoreData(enabled: boolean) {
         const identityDoc = dbConfigs.find((c) => c.id === 'store_identity');
         if (identityDoc) {
           setStoreIdentity(identityDoc);
-          localStorage.setItem('pos_store_identity', JSON.stringify(identityDoc));
         } else {
           firestoreService.setDocWithId('configs', 'store_identity', DEFAULT_STORE_IDENTITY);
         }
@@ -409,7 +396,6 @@ export function useFirestoreData(enabled: boolean) {
         const configDoc = dbConfigs.find((c) => c.id === 'dashboardConfig');
         if (configDoc) {
           setDashboardConfig(configDoc);
-          localStorage.setItem('pos_dashboard_config', JSON.stringify(configDoc));
         } else {
           firestoreService.setDocWithId('configs', 'dashboardConfig', DEFAULT_DASHBOARD_CONFIG);
         }
@@ -441,6 +427,24 @@ export function useFirestoreData(enabled: boolean) {
       unsubConfigs();
     };
   }, [enabled]);
+
+  useDebouncedLocalStorageWrite('pos_customers', customers);
+  useDebouncedLocalStorageWrite('pos_customer_payments', customerPayments);
+  useDebouncedLocalStorageWrite('pos_customer_refunds', customerRefunds);
+  useDebouncedLocalStorageWrite('pos_credit_notes', creditNotes, 800, (notes) =>
+    notes.map((cn) => ({ ...cn, code: undefined }))
+  );
+  useDebouncedLocalStorageWrite('pos_movements', movements);
+  useDebouncedLocalStorageWrite('pos_closures', closures);
+  useDebouncedLocalStorageWrite('pos_payables', payables);
+  useDebouncedLocalStorageWrite('pos_payable_payments', payablePayments);
+  useDebouncedLocalStorageWrite('pos_supplier_returns', supplierReturns);
+  useDebouncedLocalStorageWrite('pos_supplier_credit_notes', supplierCreditNotes);
+  useDebouncedLocalStorageWrite('pos_card_deposits', cardDeposits);
+  useDebouncedLocalStorageWrite('pos_purchase_orders', purchaseOrders);
+  useDebouncedLocalStorageWrite('pos_purchase_receipts', purchaseReceipts);
+  useDebouncedLocalStorageWrite('pos_store_identity', storeIdentity);
+  useDebouncedLocalStorageWrite('pos_dashboard_config', dashboardConfig);
 
   return {
     products,

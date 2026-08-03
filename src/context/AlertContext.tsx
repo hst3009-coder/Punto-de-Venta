@@ -9,7 +9,7 @@ interface AlertContextType {
 const AlertContext = createContext<AlertContextType | undefined>(undefined);
 
 export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [activeAlert, setActiveAlert] = useState<CustomAlertConfig | null>(null);
+  const [queue, setQueue] = useState<CustomAlertConfig[]>([]);
 
   const showAlert = useCallback((
     title: string,
@@ -18,14 +18,15 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     confirmLabel?: string
   ): Promise<void> => {
     return new Promise((resolve) => {
-      setActiveAlert({
+      const newAlert: CustomAlertConfig = {
         id: Math.random().toString(),
         type,
         title,
         message,
         confirmLabel,
         onConfirm: () => resolve(),
-      });
+      };
+      setQueue((prev) => [...prev, newAlert]);
     });
   }, []);
 
@@ -36,7 +37,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     cancelLabel?: string
   ): Promise<boolean> => {
     return new Promise((resolve) => {
-      setActiveAlert({
+      const newAlert: CustomAlertConfig = {
         id: Math.random().toString(),
         type: 'confirm',
         title,
@@ -45,13 +46,16 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         cancelLabel,
         onConfirm: () => resolve(true),
         onCancel: () => resolve(false),
-      });
+      };
+      setQueue((prev) => [...prev, newAlert]);
     });
   }, []);
 
-  const handleClose = () => {
-    setActiveAlert(null);
-  };
+  const handleClose = useCallback(() => {
+    setQueue((prev) => prev.slice(1));
+  }, []);
+
+  const activeAlert = queue.length > 0 ? queue[0] : null;
 
   return (
     <AlertContext.Provider value={{ showAlert, showConfirm }}>
@@ -68,3 +72,4 @@ export const useAlert = () => {
   }
   return context;
 };
+

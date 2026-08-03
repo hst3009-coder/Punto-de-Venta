@@ -6,6 +6,7 @@ import { ProductCard } from './components/ProductCard';
 import { CartItemRow } from './components/CartItemRow';
 import { PackagingSelectModal } from './components/PackagingSelectModal';
 import { PriceOverrideModal } from './components/PriceOverrideModal';
+import { CartTotalOverrideModal } from './components/CartTotalOverrideModal';
 
 function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
   return React.lazy(async () => {
@@ -38,11 +39,12 @@ const DashboardView = lazyWithRetry(() => import('./components/DashboardView'), 
 import { firestoreService, authService } from './lib/firebase';
 import { increment } from 'firebase/firestore';
 import { roundCents, roundUpToNearestFive } from './lib/money';
-import { buildSaleBatchOperations } from './lib/saleProcessor';
+import { buildSaleBatchOperations, calculateSaleTotals } from './lib/saleProcessor';
 import { getSaleTimestamp } from './lib/dates';
 import { getListPrice } from './lib/priceLists';
-import { getEffectiveItemInfo } from './lib/bulkPricing';
+import { getEffectiveItemInfo, getCartItemKey } from './lib/bulkPricing';
 import { matchesProductSearch, rankSearchResults } from './lib/search';
+import { calculateABCClassification } from './lib/abcAnalysis';
 import { LoginScreen } from './components/LoginScreen';
 import { PinLockScreen } from './components/PinLockScreen';
 import { ROLE_DEFAULT_PERMISSIONS } from './lib/permissions';
@@ -193,6 +195,19 @@ export default function App() {
   const [selectedCartItemId, setSelectedCartItemId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [priceOverrideModalItem, setPriceOverrideModalItem] = useState<CartItem | null>(null);
+  const [isCartTotalOverrideOpen, setIsCartTotalOverrideOpen] = useState(false);
+  const [cartTotalAdjustmentActive, setCartTotalAdjustmentActive] = useState<boolean>(false);
+  const lastTotalNetoTapRef = useRef<number>(0);
+
+  // --- Toast state for non-blocking notifications ---
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 2500);
+  }, []);
   
   const todaysSalesCount = useMemo(() => {
     const todayStr = new Date().toLocaleDateString('en-CA'); // "YYYY-MM-DD"
@@ -219,6 +234,31 @@ export default function App() {
     });
     return map;
   }, [salesHistory]);
+
+  const monthlySalesCount = useMemo(() => {
+    const map = new Map<string, number>();
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    salesHistory.forEach((sale) => {
+      if (sale.isCancelled) return;
+      const sDate = new Date(getSaleTimestamp(sale));
+      if (sDate.getFullYear() === currentYear && sDate.getMonth() === currentMonth) {
+        sale.items?.forEach((item) => {
+          if (item.product?.id) {
+            const current = map.get(item.product.id) || 0;
+            map.set(item.product.id, current + (item.quantity || 1));
+          }
+        });
+      }
+    });
+    return map;
+  }, [salesHistory]);
+
+  const abcAnalysis = useMemo(() => {
+    return calculateABCClassification(products, salesHistory);
+  }, [products, salesHistory]);
 
   // --- PIN Session States ---
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(() => {
@@ -391,31 +431,10 @@ export default function App() {
   
   // --- Totals Computations ---
   const totals = useMemo(() => {
-    let totalSubtotal = 0;
-    let totalTax = 0;
-    let rawTotal = 0;
-
-    effectiveCart.forEach((item) => {
-      const itemTotal = item.product.price * item.quantity;
-      rawTotal += itemTotal;
-
-      if (item.product.taxExempt) {
-        totalSubtotal += itemTotal;
-      } else {
-        const itemSubtotal = roundCents(itemTotal / 1.18);
-        const itemTax = roundCents(itemTotal - itemSubtotal);
-        totalSubtotal += itemSubtotal;
-        totalTax += itemTax;
-      }
-    });
-
-    const finalTotal = roundUpToNearestFive(rawTotal);
-    
+    const saleTotals = calculateSaleTotals(effectiveCart);
     return { 
-      subtotal: roundCents(totalSubtotal), 
-      tax: roundCents(totalTax), 
-      total: finalTotal, 
-      finalTotal,
+      ...saleTotals, 
+      finalTotal: saleTotals.total, 
       activePriceList
     };
   }, [effectiveCart, activePriceList]);
@@ -633,6 +652,9 @@ export default function App() {
   }, [pendingSales]);
 
   useEffect(() => {
+    if (cart.length === 0) {
+      setCartTotalAdjustmentActive(false);
+    }
     if (cartListRef.current) {
       cartListRef.current.scrollTo({
         top: cartListRef.current.scrollHeight,
@@ -649,13 +671,21 @@ export default function App() {
       return;
     }
 
+    const existingOverride = cart.find(
+      (item) => item.product.id === product.id && typeof item.priceOverride === 'number'
+    )?.priceOverride;
+
+    if (cartTotalAdjustmentActive && existingOverride === undefined) {
+      showToast('El Total Neto ajustado aplicó solo a los productos de ese momento — este producto se agregó a su precio normal.');
+    }
+
     setCart((prevCart) => {
       const targetKey = getCartItemKey(product.id, packaging?.id);
       const existingIndex = prevCart.findIndex(
         (item) => getCartItemKey(item.product.id, item.packagingId) === targetKey
       );
 
-      const existingOverride = prevCart.find(
+      const existingOverrideInCart = prevCart.find(
         (item) => item.product.id === product.id && typeof item.priceOverride === 'number'
       )?.priceOverride;
 
@@ -665,7 +695,7 @@ export default function App() {
             ? {
                 ...item,
                 quantity: item.quantity + 1,
-                ...(existingOverride !== undefined ? { priceOverride: existingOverride } : {}),
+                ...(existingOverrideInCart !== undefined ? { priceOverride: existingOverrideInCart } : {}),
               }
             : item
         );
@@ -686,13 +716,13 @@ export default function App() {
           quantity: 1,
           packagingId: packaging?.id,
           selectedPackaging: packaging,
-          ...(existingOverride !== undefined ? { priceOverride: existingOverride } : {}),
+          ...(existingOverrideInCart !== undefined ? { priceOverride: existingOverrideInCart } : {}),
         },
       ];
     });
     setSelectedCartItemId(getCartItemKey(product.id, packaging?.id));
     setSearchQuery(''); // Clear search query upon selection
-  }, []);
+  }, [cart, cartTotalAdjustmentActive, showToast]);
 
   const handleApplyPriceOverride = useCallback((productId: string, newUnitPrice: number) => {
     setCart((prevCart) =>
@@ -714,6 +744,30 @@ export default function App() {
         return item;
       })
     );
+  }, []);
+
+  const handleApplyCartTotalOverride = useCallback((overrides: { itemKey: string; newUnitPrice: number }[]) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        const targetKey = getCartItemKey(item.product.id, item.packagingId);
+        const match = overrides.find((o) => o.itemKey === targetKey);
+        if (match) {
+          return { ...item, priceOverride: match.newUnitPrice };
+        }
+        return item;
+      })
+    );
+    setCartTotalAdjustmentActive(true);
+  }, []);
+
+  const handleResetAllPriceOverrides = useCallback(() => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        const { priceOverride, ...rest } = item;
+        return rest;
+      })
+    );
+    setCartTotalAdjustmentActive(false);
   }, []);
 
   const handleIncrementQuantity = useCallback((productId: string, packagingId?: string) => {
@@ -1042,16 +1096,6 @@ export default function App() {
     showClerkInput
   ]);
 
-  // --- Toast state for non-blocking notifications ---
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 2500);
-  }, []);
-
   // --- Barcode / Quick Search Enter Handler ---
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1069,12 +1113,18 @@ export default function App() {
       handleAddToCart(matchedProduct);
       setSearchQuery(''); // Reset search bar
     } else {
-      const matched = products.filter((p) => {
+      const visibleCategoryProducts = products.filter((p) => {
         if (p.visible === false) return false;
-        const matchCategory = selectedCategory === 'all' || p.category === selectedCategory;
-        return matchCategory && matchesProductSearch(p, cleanQuery);
+        return selectedCategory === 'all' || p.category === selectedCategory;
       });
-      const ranked = rankSearchResults(matched, cleanQuery, recentSalesCount);
+      const ranked = rankSearchResults(
+        visibleCategoryProducts,
+        cleanQuery,
+        recentSalesCount,
+        monthlySalesCount,
+        abcAnalysis.abcMap,
+        abcAnalysis.hasHistory
+      );
       if (ranked.length > 0) {
         handleAddToCart(ranked[0]);
         setSearchQuery(''); // Reset search bar
@@ -1207,15 +1257,20 @@ export default function App() {
 
   // --- Filtering Products ---
   const filteredProducts = useMemo(() => {
-    const filtered = products.filter((prod) => {
+    const visibleCategoryProducts = products.filter((prod) => {
       if (prod.visible === false) return false;
-      const matchCategory = selectedCategory === 'all' || prod.category === selectedCategory;
-      const matchQuery = matchesProductSearch(prod, debouncedSearchQuery);
-      return matchCategory && matchQuery;
+      return selectedCategory === 'all' || prod.category === selectedCategory;
     });
 
-    return rankSearchResults(filtered, debouncedSearchQuery, recentSalesCount);
-  }, [products, selectedCategory, debouncedSearchQuery, recentSalesCount]);
+    return rankSearchResults(
+      visibleCategoryProducts,
+      debouncedSearchQuery,
+      recentSalesCount,
+      monthlySalesCount,
+      abcAnalysis.abcMap,
+      abcAnalysis.hasHistory
+    );
+  }, [products, selectedCategory, debouncedSearchQuery, recentSalesCount, monthlySalesCount, abcAnalysis]);
 
   // Clerk Name Submit
   const handleClerkNameSubmit = (e: React.FormEvent) => {
@@ -1882,6 +1937,7 @@ export default function App() {
                   priceListName={effInfo?.appliedPriceListName || totals.activePriceList?.name}
                   bulkTierApplied={effInfo?.bulkTierApplied}
                   appliedPriceType={effInfo?.appliedType}
+                  priceListFallbackNoCost={effInfo?.priceListFallbackNoCost}
                   onIncrement={handleIncrementQuantity}
                   onDecrement={handleDecrementQuantity}
                   onRemove={handleRemoveFromCart}
@@ -1905,7 +1961,24 @@ export default function App() {
               <span>ITBIS (18%):</span>
               <span className="text-slate-800 font-bold">${totals.tax.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-lg font-bold text-slate-900 pt-3 border-t border-slate-200">
+            <div
+              onDoubleClick={() => {
+                if (cart.length > 0) {
+                  setIsCartTotalOverrideOpen(true);
+                }
+              }}
+              onTouchEnd={() => {
+                const now = Date.now();
+                if (now - lastTotalNetoTapRef.current < 300) {
+                  if (cart.length > 0) {
+                    setIsCartTotalOverrideOpen(true);
+                  }
+                }
+                lastTotalNetoTapRef.current = now;
+              }}
+              className="flex justify-between text-lg font-bold text-slate-900 pt-3 border-t border-slate-200 cursor-pointer select-none hover:bg-slate-100/80 p-1.5 rounded-lg transition-colors"
+              title="Doble clic o doble toque para ajustar el total de la venta"
+            >
               <span>Total Neto:</span>
               <span>${totals.total.toFixed(2)}</span>
             </div>
@@ -2444,6 +2517,16 @@ export default function App() {
         item={priceOverrideModalItem}
         onConfirm={handleApplyPriceOverride}
         onReset={handleResetPriceOverride}
+      />
+
+      {/* Cart Total Override Modal */}
+      <CartTotalOverrideModal
+        isOpen={isCartTotalOverrideOpen}
+        onClose={() => setIsCartTotalOverrideOpen(false)}
+        cartItems={effectiveCart}
+        currentTotal={totals.total}
+        onConfirm={handleApplyCartTotalOverride}
+        onResetAll={handleResetAllPriceOverrides}
       />
     </div>
   );

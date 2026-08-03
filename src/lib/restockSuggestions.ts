@@ -1,4 +1,5 @@
 import { Product, Sale } from '../types';
+import { getSaleTimestamp } from './dates';
 
 export interface RestockSuggestion {
   product: Product;
@@ -21,10 +22,7 @@ export function getRestockSuggestions(
   // Filter valid non-cancelled sales within the last `days` days
   const recentSales = (sales || []).filter((sale) => {
     if (sale.isCancelled) return false;
-    const saleDateStr = sale.date || sale.createdAt;
-    if (!saleDateStr) return false;
-    const saleTime = new Date(saleDateStr).getTime();
-    return !isNaN(saleTime) && saleTime >= cutoffTime;
+    return getSaleTimestamp(sale) >= cutoffTime;
   });
 
   // Calculate total units sold per productId

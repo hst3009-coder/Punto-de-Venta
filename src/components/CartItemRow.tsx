@@ -14,6 +14,7 @@ interface CartItemRowProps {
   priceListName?: string;
   bulkTierApplied?: BulkTier;
   appliedPriceType?: 'standard' | 'price_list' | 'bulk_pricing' | 'packaging' | 'price_override';
+  priceListFallbackNoCost?: boolean;
 }
 
 export const CartItemRow = React.memo<CartItemRowProps>(({
@@ -28,6 +29,7 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
   priceListName,
   bulkTierApplied,
   appliedPriceType,
+  priceListFallbackNoCost,
 }) => {
   const { product, quantity, packagingId, selectedPackaging } = item;
   const subtotal = product.price * quantity;
@@ -106,6 +108,12 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
             {!appliedPriceType && isPriceAdjusted && !selectedPackaging && (
               <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md">
                 {priceListName || 'Lista'} (Catálogo: ${originalPrice?.toFixed(2)})
+              </span>
+            )}
+
+            {priceListFallbackNoCost && (
+              <span className="text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                ⚠️ Sin costo registrado — se usó el precio normal en vez del precio de lista
               </span>
             )}
           </div>

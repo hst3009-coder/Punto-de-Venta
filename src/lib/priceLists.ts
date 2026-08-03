@@ -13,6 +13,9 @@ export function getListPrice(product: Product, list: ClientPriceList): number {
   }
 
   const cost = product.cost || 0;
+  if (cost <= 0) {
+    return product.price;
+  }
   const basePrice = cost * (1 + list.profitPercent / 100);
   const finalPrice = product.taxExempt ? basePrice : basePrice * 1.18;
 

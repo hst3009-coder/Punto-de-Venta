@@ -286,7 +286,7 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
     }
 
     // Validate bulk pricing tiers if configured
-    const bulkPricingError = validateBulkTiers(bulkPricing, parsedPrice);
+    const bulkPricingError = validateBulkTiers(bulkPricing, parsedPrice, parsedCost);
     if (bulkPricingError) {
       setError(bulkPricingError);
       return;
@@ -1031,8 +1031,10 @@ export const ProductFormTab: React.FC<ProductFormTabProps> = ({
                   const candidateList = [...bulkPricing, { minQuantity: minQty, price: tierPrice }].sort((a, b) => a.minQuantity - b.minQuantity);
                   const parsedBasePrice = parseFloat(price);
                   const currentBasePrice = !isNaN(parsedBasePrice) && parsedBasePrice > 0 ? parsedBasePrice : Infinity;
+                  const parsedCostVal = parseFloat(cost);
+                  const currentCost = !isNaN(parsedCostVal) && parsedCostVal > 0 ? parsedCostVal : 0;
 
-                  const validationErr = validateBulkTiers(candidateList, currentBasePrice);
+                  const validationErr = validateBulkTiers(candidateList, currentBasePrice, currentCost);
                   if (validationErr) {
                     setError(validationErr);
                     return;

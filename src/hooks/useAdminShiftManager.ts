@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Employee, Closure, Sale, Movement, AuditLogEntry, isMixedSale } from '../types';
+import { Employee, Closure, Sale, Movement, AuditLogEntry, isMixedSale, DashboardConfig } from '../types';
 import { getSaleTimestamp } from '../lib/dates';
 import { firestoreService } from '../lib/firebase';
 import { usePermissions } from './usePermissions';
@@ -10,6 +10,7 @@ interface UseAdminShiftManagerProps {
   closures: Closure[];
   sales: Sale[];
   movements: Movement[];
+  dashboardConfig?: DashboardConfig;
   showAlert: (title: string, message: string, type?: 'success' | 'error' | 'warning' | 'info') => Promise<void>;
   showConfirm: (title: string, message: string, confirmText?: string, cancelText?: string) => Promise<boolean>;
 }
@@ -20,6 +21,7 @@ export function useAdminShiftManager({
   closures,
   sales,
   movements,
+  dashboardConfig,
   showAlert,
   showConfirm,
 }: UseAdminShiftManagerProps) {
@@ -70,7 +72,7 @@ export function useAdminShiftManager({
           (a, b) => getSaleTimestamp(a) - getSaleTimestamp(b)
         );
         const firstSaleTime = getSaleTimestamp(sortedEmpSales[0]);
-        const initialCash = 500;
+        const initialCash = dashboardConfig?.defaultInitialCash ?? 500;
 
         const empCashSalesSum = empSales.reduce((acc, s) => {
           if (s.paymentMethod === 'cash') return acc + s.total;
@@ -109,7 +111,7 @@ export function useAdminShiftManager({
     });
 
     return shifts;
-  }, [employees, closures, sales, movements]);
+  }, [employees, closures, sales, movements, dashboardConfig]);
 
   const pendingClosures = useMemo(() => {
     return closures.filter((c) => c.pendingCashCount === true);
@@ -142,7 +144,7 @@ export function useAdminShiftManager({
         date: dateString,
         clerkName: shift.employee.name,
         employeeId: shift.employee.id,
-        initialCash: 500,
+        initialCash: dashboardConfig?.defaultInitialCash ?? 500,
         salesTotal: shift.totalSalesSum,
         expectedCash: shift.expectedCash,
         actualCash: shift.expectedCash, // marker

@@ -67,6 +67,19 @@ export function calculateMarginPercent(filteredSales: Sale[], products: Product[
   return (totalProfit / applicableSalesAmount) * 100;
 }
 
+export function isEventWithinClosedShift(
+  employeeId: string | undefined,
+  eventTimestamp: number,
+  closures: Closure[]
+): boolean {
+  if (!employeeId) return false;
+  return closures.some(closure => {
+    if (closure.employeeId !== employeeId) return false;
+    const closureTime = new Date(closure.createdAt || closure.date).getTime();
+    return closureTime > eventTimestamp;
+  });
+}
+
 export function calculateCashLiquidityTotal(
   sales: Sale[],
   closures: Closure[],
@@ -77,11 +90,7 @@ export function calculateCashLiquidityTotal(
     const employeeId = sale.soldBy?.id;
     if (employeeId) {
       const saleTime = getSaleTimestamp(sale);
-      const isClosed = closures.some(closure => {
-        if (closure.employeeId !== employeeId) return false;
-        const closureTime = new Date(closure.createdAt || closure.date).getTime();
-        return closureTime > saleTime;
-      });
+      const isClosed = isEventWithinClosedShift(employeeId, saleTime, closures);
       if (!isClosed) return acc;
     }
 
@@ -106,11 +115,7 @@ export function calculateCashLiquidityTotal(
     if (!employeeId) return true;
 
     const expenseTime = new Date(expense.createdAt || expense.date).getTime();
-    return closures.some(closure => {
-      if (closure.employeeId !== employeeId) return false;
-      const closureTime = new Date(closure.createdAt || closure.date).getTime();
-      return closureTime > expenseTime;
-    });
+    return isEventWithinClosedShift(employeeId, expenseTime, closures);
   });
 
   const closedExpensesSum = closedCashExpenses.reduce((acc, m) => acc + m.amount, 0);
@@ -121,11 +126,7 @@ export function calculateCashLiquidityTotal(
     if (!employeeId) return true;
 
     const refundTime = new Date(refund.createdAt || refund.date).getTime();
-    return closures.some(closure => {
-      if (closure.employeeId !== employeeId) return false;
-      const closureTime = new Date(closure.createdAt || closure.date).getTime();
-      return closureTime > refundTime;
-    });
+    return isEventWithinClosedShift(employeeId, refundTime, closures);
   });
   const closedRefundsSum = closedCashRefunds.reduce((acc, r) => acc + r.amount, 0);
 

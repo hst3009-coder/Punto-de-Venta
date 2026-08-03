@@ -1,5 +1,8 @@
 import { Sale, CustomerPayment, Customer, CustomerRefund, isMixedSale } from '../types';
 
+/**
+ * Esta función asume que toda venta con componente de crédito (pura o Mixta) tiene creditStatus: 'pending' asignado correctamente al crearse (ver saleProcessor.ts / App.tsx). Si ese campo no se asigna, la deuda correspondiente se excluirá silenciosamente de este cálculo.
+ */
 export function getCustomerDebt(
   customerId: string,
   sales: Sale[],

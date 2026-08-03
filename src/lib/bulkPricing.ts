@@ -1,6 +1,10 @@
 import { Product, BulkTier, ClientPriceList, ProductPackaging } from '../types';
 import { getListPrice } from './priceLists';
 
+export function getCartItemKey(productId: string, packagingId?: string): string {
+  return packagingId ? `${productId}-${packagingId}` : productId;
+}
+
 export interface EffectivePriceInfo {
   unitPrice: number;
   appliedType: 'standard' | 'price_list' | 'bulk_pricing' | 'packaging' | 'price_override';
@@ -8,13 +12,15 @@ export interface EffectivePriceInfo {
   bulkTierApplied?: BulkTier;
   appliedPriceListName?: string;
   priceOverrideApplied?: number;
+  priceListFallbackNoCost?: boolean;
 }
 
 /**
  * Validates bulk pricing tiers for a product.
  * Each tier must have minQuantity > 1, and be strictly increasing in minQuantity while strictly decreasing in price.
+ * Also validates that tier.price >= cost * 1.15 if cost is provided (> 0).
  */
-export function validateBulkTiers(tiers: BulkTier[], basePrice: number): string | null {
+export function validateBulkTiers(tiers: BulkTier[], basePrice: number, cost?: number): string | null {
   if (!tiers || tiers.length === 0) return null;
 
   // Sort ascending by minQuantity
@@ -29,6 +35,12 @@ export function validateBulkTiers(tiers: BulkTier[], basePrice: number): string 
 
     if (isNaN(tier.price) || tier.price <= 0) {
       return 'El precio por volumen debe ser un valor numérico positivo mayor a 0.';
+    }
+
+    if (typeof cost === 'number' && cost > 0) {
+      if (tier.price < cost * 1.15) {
+        return `El escalón de ${tier.minQuantity}+ unidades (RD$ ${tier.price.toFixed(2)}) está por debajo del margen mínimo de 15% sobre el costo (RD$ ${(cost * 1.15).toFixed(2)}).`;
+      }
     }
 
     if (i === 0) {
@@ -146,12 +158,15 @@ export function getEffectiveItemInfo(
     };
   }
 
+  const isPriceListFallback = Boolean(activePriceList && (product.cost || 0) <= 0);
+
   if (best.type === 'price_list' && priceListPrice !== null) {
     return {
       unitPrice: priceListPrice,
       appliedType: 'price_list',
       originalCatalogPrice,
       appliedPriceListName: activePriceList?.name,
+      priceListFallbackNoCost: isPriceListFallback,
     };
   }
 
@@ -159,5 +174,6 @@ export function getEffectiveItemInfo(
     unitPrice: originalCatalogPrice,
     appliedType: 'standard',
     originalCatalogPrice,
+    priceListFallbackNoCost: isPriceListFallback,
   };
 }
