@@ -39,7 +39,7 @@ const DashboardView = lazyWithRetry(() => import('./components/DashboardView'), 
 import { firestoreService, authService } from './lib/firebase';
 import { increment } from 'firebase/firestore';
 import { roundCents, roundUpToNearestFive } from './lib/money';
-import { buildSaleBatchOperations, calculateSaleTotals } from './lib/saleProcessor';
+import { buildSaleBatchOperations, calculateSaleTotals, prepareOperationsForStorage, reconstructOperationsFromStorage } from './lib/saleProcessor';
 import { getSaleTimestamp } from './lib/dates';
 import { getListPrice } from './lib/priceLists';
 import { getEffectiveItemInfo, getCartItemKey } from './lib/bulkPricing';
@@ -361,7 +361,8 @@ export default function App() {
 
     for (const item of queue) {
       try {
-        await firestoreService.runBatch(item.operations);
+        const opsToRun = reconstructOperationsFromStorage(item.operations);
+        await firestoreService.runBatch(opsToRun);
       } catch (err) {
         console.error(`Error al reintentar sincronizar venta ${item.id}:`, err);
         remainingQueue.push(item);
@@ -1248,7 +1249,7 @@ export default function App() {
         id: saleWithEmployee.id,
         timestamp: Date.now(),
         saleData: saleWithEmployee,
-        operations,
+        operations: prepareOperationsForStorage(operations),
       };
       setPendingSyncQueue((prev) => {
         const updated = [...prev.filter((item) => item.id !== failedSaleItem.id), failedSaleItem];

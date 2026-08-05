@@ -162,6 +162,57 @@ export function buildSaleBatchOperations({
   };
 }
 
+export function extractIncrementValue(val: any): number | null {
+  if (!val || typeof val !== 'object') return null;
+  if (typeof val.__incrementBy === 'number') {
+    return val.__incrementBy;
+  }
+  if (typeof val.operand === 'number') {
+    return val.operand;
+  }
+  if (typeof val._operand === 'number') {
+    return val._operand;
+  }
+  return null;
+}
+
+export function prepareOperationsForStorage(operations: BatchOperation[]): BatchOperation[] {
+  return operations.map((op) => {
+    if (!op.data || typeof op.data !== 'object') return op;
+    const newData: Record<string, any> = { ...op.data };
+    let hasChanges = false;
+
+    for (const key of Object.keys(newData)) {
+      const val = newData[key];
+      const incVal = extractIncrementValue(val);
+      if (incVal !== null) {
+        newData[key] = { __incrementBy: incVal };
+        hasChanges = true;
+      }
+    }
+
+    return hasChanges ? { ...op, data: newData } : op;
+  });
+}
+
+export function reconstructOperationsFromStorage(operations: BatchOperation[]): BatchOperation[] {
+  return operations.map((op) => {
+    if (!op.data || typeof op.data !== 'object') return op;
+    const newData: Record<string, any> = { ...op.data };
+    let hasChanges = false;
+
+    for (const key of Object.keys(newData)) {
+      const val = newData[key];
+      if (val && typeof val === 'object' && typeof val.__incrementBy === 'number') {
+        newData[key] = increment(val.__incrementBy);
+        hasChanges = true;
+      }
+    }
+
+    return hasChanges ? { ...op, data: newData } : op;
+  });
+}
+
 export async function processSaleBatch({
   sale,
   products,
@@ -177,3 +228,4 @@ export async function processSaleBatch({
   await runBatchFn(result.operations);
   return result;
 }
+
