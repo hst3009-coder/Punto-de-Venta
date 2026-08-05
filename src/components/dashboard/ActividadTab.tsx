@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { AuditLogEntry, Employee } from '../../types';
 import { firestoreService } from '../../lib/firebase';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { isFuzzyMatch } from '../../lib/textSearch';
 
 interface ActividadTabProps {
   currentEmployee?: Employee | null;
@@ -186,6 +188,8 @@ export const ActividadTab: React.FC<ActividadTabProps> = ({
     return () => unsubscribe();
   }, []);
 
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
+
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       // Employee filter
@@ -202,16 +206,15 @@ export const ActividadTab: React.FC<ActividadTabProps> = ({
       }
 
       // Text search on description & employeeName
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const descMatch = (log.description || '').toLowerCase().includes(query);
-        const empMatch = (log.employeeName || '').toLowerCase().includes(query);
+      if (debouncedSearchQuery.trim()) {
+        const descMatch = isFuzzyMatch(debouncedSearchQuery, log.description || '');
+        const empMatch = isFuzzyMatch(debouncedSearchQuery, log.employeeName || '');
         if (!descMatch && !empMatch) return false;
       }
 
       return true;
     });
-  }, [logs, selectedEmployeeId, selectedActionType, searchQuery, employees]);
+  }, [logs, selectedEmployeeId, selectedActionType, debouncedSearchQuery, employees]);
 
   const hasActiveFilters = searchQuery !== '' || selectedEmployeeId !== 'all' || selectedActionType !== 'all';
 

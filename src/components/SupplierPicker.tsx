@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Product, AccountPayable } from '../types';
+import { Product, AccountPayable, Supplier } from '../types';
 import { firestoreService } from '../lib/firebase';
 import { getStringValue } from '../lib/normalize';
-import { User, ChevronDown } from 'lucide-react';
+import { User, ChevronDown, Phone, Building2 } from 'lucide-react';
 
 interface SupplierPickerProps {
   value: string;
   onChange: (value: string) => void;
   products?: Product[];
   payables?: AccountPayable[];
+  suppliers?: Supplier[];
   placeholder?: string;
   className?: string;
   id?: string;
@@ -19,12 +20,14 @@ export const SupplierPicker: React.FC<SupplierPickerProps> = ({
   onChange,
   products,
   payables,
+  suppliers,
   placeholder = 'Escribe o selecciona proveedor...',
   className = '',
   id,
 }) => {
   const [internalProducts, setInternalProducts] = useState<Product[]>([]);
   const [internalPayables, setInternalPayables] = useState<AccountPayable[]>([]);
+  const [internalSuppliers, setInternalSuppliers] = useState<Supplier[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -47,26 +50,47 @@ export const SupplierPicker: React.FC<SupplierPickerProps> = ({
     }
   }, [payables]);
 
+  // Load suppliers if not provided
+  useEffect(() => {
+    if (!suppliers) {
+      firestoreService.getCollectionDocs<Supplier>('suppliers')
+        .then(setInternalSuppliers)
+        .catch(err => console.warn('SupplierPicker: Error loading suppliers', err));
+    }
+  }, [suppliers]);
+
   const finalProducts = products || internalProducts;
   const finalPayables = payables || internalPayables;
+  const finalSuppliers = suppliers || internalSuppliers;
 
-  // Extract unique suggestions from products and accountsPayable
+  // Map of supplier details by name
+  const supplierDetailsMap = useMemo(() => {
+    const map = new Map<string, Supplier>();
+    finalSuppliers.forEach((s) => {
+      if (s.name && s.name.trim()) {
+        map.set(s.name.trim().toLowerCase(), s);
+      }
+    });
+    return map;
+  }, [finalSuppliers]);
+
+  // Extract unique suggestions from suppliers, products, and accountsPayable
   const suggestions = useMemo(() => {
     const set = new Set<string>();
+    finalSuppliers.forEach((s) => {
+      const name = getStringValue(s.name).trim();
+      if (name) set.add(name);
+    });
     finalProducts.forEach(p => {
       const provider = getStringValue(p.provider).trim();
-      if (provider) {
-        set.add(provider);
-      }
+      if (provider) set.add(provider);
     });
     finalPayables.forEach(ap => {
       const supplierName = getStringValue(ap.supplierName).trim();
-      if (supplierName) {
-        set.add(supplierName);
-      }
+      if (supplierName) set.add(supplierName);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [finalProducts, finalPayables]);
+  }, [finalSuppliers, finalProducts, finalPayables]);
 
   // Filter suggestions based on typed value
   const filteredSuggestions = useMemo(() => {
@@ -166,22 +190,38 @@ export const SupplierPicker: React.FC<SupplierPickerProps> = ({
       </div>
 
       {isOpen && filteredSuggestions.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto py-1">
-          {filteredSuggestions.map((suggestion, index) => (
-            <button
-              key={index}
-              type="button"
-              onClick={() => handleSelect(suggestion)}
-              onMouseEnter={() => setHighlightedIndex(index)}
-              className={`w-full text-left px-3.5 py-2 text-xs font-semibold border-b border-slate-50 last:border-0 transition-colors ${
-                index === highlightedIndex
-                  ? 'bg-indigo-50 text-indigo-700 font-bold'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {suggestion}
-            </button>
-          ))}
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-52 overflow-y-auto py-1">
+          {filteredSuggestions.map((suggestion, index) => {
+            const savedSupplier = supplierDetailsMap.get(suggestion.toLowerCase());
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={() => handleSelect(suggestion)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                className={`w-full text-left px-3.5 py-2 text-xs border-b border-slate-50 last:border-0 transition-colors flex items-center justify-between gap-2 ${
+                  index === highlightedIndex
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'text-slate-700 font-semibold hover:bg-slate-50'
+                }`}
+              >
+                <span>{suggestion}</span>
+                {savedSupplier && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-normal shrink-0">
+                    {savedSupplier.phone && (
+                      <span className="flex items-center gap-0.5 text-emerald-700 font-mono font-semibold bg-emerald-50 px-1.5 py-0.5 rounded-md">
+                        <Phone className="w-3 h-3" />
+                        {savedSupplier.phone}
+                      </span>
+                    )}
+                    {savedSupplier.contactName && !savedSupplier.phone && (
+                      <span className="truncate max-w-[100px]">{savedSupplier.contactName}</span>
+                    )}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

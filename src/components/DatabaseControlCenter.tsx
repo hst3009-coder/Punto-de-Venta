@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { isFuzzyMatch } from '../lib/textSearch';
 import { 
   Database, 
   Plus, 
@@ -470,12 +472,13 @@ export const DatabaseControlCenter: React.FC<DatabaseControlCenterProps> = ({
     }
   };
 
+  const debouncedSearchQueryStr = useDebouncedValue(searchQueryStr, 250);
+
   // Filtered list of documents for search
   const filteredDocs = documents.filter(doc => {
-    if (!searchQueryStr) return true;
-    const queryLower = searchQueryStr.toLowerCase();
+    if (!debouncedSearchQueryStr.trim()) return true;
     return Object.values(doc).some(val => 
-      String(val).toLowerCase().includes(queryLower)
+      val !== undefined && val !== null && isFuzzyMatch(debouncedSearchQueryStr, String(val))
     );
   });
 

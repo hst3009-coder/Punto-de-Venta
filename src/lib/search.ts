@@ -1,56 +1,15 @@
 import { Product } from '../types';
+import {
+  normalizeSearchText,
+  normalizeString,
+  levenshteinDistance,
+  isFuzzyMatch,
+} from './textSearch';
 
-export function normalizeString(str: string): string {
-  return str
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-export function levenshteinDistance(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + cost
-      );
-    }
-  }
-
-  return dp[m][n];
-}
+export { normalizeSearchText, normalizeString, levenshteinDistance, isFuzzyMatch };
 
 export function isFuzzyNameMatch(productName: string, searchQuery: string): boolean {
-  const normQuery = normalizeString(searchQuery.trim());
-  const queryTokens = normQuery.split(/\s+/).filter(Boolean);
-  if (queryTokens.length === 0) return false;
-
-  const normName = normalizeString(productName || '');
-  const productWords = normName.split(/\s+/).filter(Boolean);
-  if (productWords.length === 0) return false;
-
-  return queryTokens.every((qToken) => {
-    if (normName.includes(qToken)) return true;
-
-    const maxAllowedDist = qToken.length <= 4 ? 1 : 2;
-    return productWords.some((pWord) => {
-      if (Math.abs(qToken.length - pWord.length) > maxAllowedDist) return false;
-      const dist = levenshteinDistance(qToken, pWord);
-      return dist <= maxAllowedDist;
-    });
-  });
+  return isFuzzyMatch(searchQuery, productName);
 }
 
 export function compareProductsNatural(a: Product, b: Product, recentSalesCount?: Map<string, number>): number {

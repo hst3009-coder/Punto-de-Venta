@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import { useAlert } from '../context/AlertContext';
 import { getCustomerDebt } from '../lib/customerDebt';
 import { getPayableBalance } from '../lib/payableDebt';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { isFuzzyMatch } from '../lib/textSearch';
 import {
   StoreIdentity,
   EmployeePermissions,
@@ -22,6 +24,7 @@ import {
   Closure,
   Employee,
   CardDeposit,
+  Supplier,
 } from '../types';
 import { firestoreService } from '../lib/firebase';
 import {
@@ -47,6 +50,7 @@ import { PaymentTypesSection } from './admin/PaymentTypesSection';
 import { BankAccountsSection } from './admin/BankAccountsSection';
 import { ClientPriceListsSection } from './admin/ClientPriceListsSection';
 import { DatabaseToolsSection } from './admin/DatabaseToolsSection';
+import { SuppliersSection } from './admin/SuppliersSection';
 
 interface AdminDrawerProps {
   isOpen: boolean;
@@ -72,6 +76,7 @@ interface AdminDrawerProps {
   closures?: Closure[];
   currentEmployee?: Employee;
   cardDeposits?: CardDeposit[];
+  suppliers?: Supplier[];
 }
 
 export const AdminDrawer: React.FC<AdminDrawerProps> = ({
@@ -98,6 +103,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
   closures = [],
   currentEmployee,
   cardDeposits = [],
+  suppliers = [],
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const [activeTab, setActiveTab] = useState<'identity' | 'config' | 'database' | 'employees'>(
@@ -440,6 +446,14 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
       ),
     },
     {
+      id: 'suppliers',
+      title: 'Gestión de Proveedores',
+      tab: 'config' as const,
+      keywords: ['proveedor', 'proveedores', 'contacto', 'telefono', 'email', 'compras', 'supplier', 'direccion'],
+      permission: permissions.editStoreSettings,
+      component: <SuppliersSection suppliers={suppliers} />,
+    },
+    {
       id: 'database',
       title: 'Herramientas de Base de Datos',
       tab: 'database' as const,
@@ -465,7 +479,8 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
     },
   ];
 
-  const trimmedSearch = searchQuery.trim().toLowerCase();
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
+  const trimmedSearch = debouncedSearchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
 
   // Filter sections by permissions first, then search query if provided
@@ -473,8 +488,8 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
     if (!sec.permission) return false;
     if (!isSearching) return sec.tab === activeTab;
     return (
-      sec.title.toLowerCase().includes(trimmedSearch) ||
-      sec.keywords.some((kw) => kw.includes(trimmedSearch))
+      isFuzzyMatch(trimmedSearch, sec.title) ||
+      sec.keywords.some((kw) => isFuzzyMatch(trimmedSearch, kw))
     );
   });
 

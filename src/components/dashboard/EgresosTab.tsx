@@ -1,5 +1,5 @@
 import React from 'react';
-import { Movement, Employee, DashboardConfig } from '../../types';
+import { Movement, Employee, DashboardConfig, PurchaseOrder, PurchaseReceipt, AccountPayable, PayablePayment, SupplierReturn } from '../../types';
 
 const ExpensesView = React.lazy(() => import('../ExpensesView'));
 
@@ -9,6 +9,11 @@ interface EgresosTabProps {
   clerkName: string;
   dashboardConfig: DashboardConfig;
   employees: Employee[];
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
+  accountsPayable?: AccountPayable[];
+  payablePayments?: PayablePayment[];
+  supplierReturns?: SupplierReturn[];
 }
 
 export const EgresosTab: React.FC<EgresosTabProps> = (props) => {

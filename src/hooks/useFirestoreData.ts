@@ -14,6 +14,7 @@ import {
   PayablePayment,
   SupplierReturn,
   SupplierCreditNote,
+  Supplier,
   CardDeposit,
   PurchaseOrder,
   PurchaseReceipt,
@@ -114,6 +115,11 @@ export function useFirestoreData(enabled: boolean) {
 
   const [supplierCreditNotes, setSupplierCreditNotes] = useState<SupplierCreditNote[]>(() => {
     const saved = localStorage.getItem('pos_supplier_credit_notes');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
+    const saved = localStorage.getItem('pos_suppliers');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -343,6 +349,17 @@ export function useFirestoreData(enabled: boolean) {
       }
     );
 
+    // 14b. Suppliers
+    const unsubSuppliers = firestoreService.subscribeToCollection<Supplier>(
+      'suppliers',
+      (dbSuppliers) => {
+        setSuppliers(dbSuppliers);
+      },
+      (err) => {
+        console.error('Firestore suppliers subscription error:', err);
+      }
+    );
+
     // 15. Card Deposits
     const unsubCardDeposits = firestoreService.subscribeToCollection<CardDeposit>(
       'cardDeposits',
@@ -421,6 +438,7 @@ export function useFirestoreData(enabled: boolean) {
       unsubPayablePayments();
       unsubSupplierReturns();
       unsubSupplierCreditNotes();
+      unsubSuppliers();
       unsubCardDeposits();
       unsubPurchaseOrders();
       unsubPurchaseReceipts();
@@ -440,6 +458,7 @@ export function useFirestoreData(enabled: boolean) {
   useDebouncedLocalStorageWrite('pos_payable_payments', payablePayments);
   useDebouncedLocalStorageWrite('pos_supplier_returns', supplierReturns);
   useDebouncedLocalStorageWrite('pos_supplier_credit_notes', supplierCreditNotes);
+  useDebouncedLocalStorageWrite('pos_suppliers', suppliers);
   useDebouncedLocalStorageWrite('pos_card_deposits', cardDeposits);
   useDebouncedLocalStorageWrite('pos_purchase_orders', purchaseOrders);
   useDebouncedLocalStorageWrite('pos_purchase_receipts', purchaseReceipts);
@@ -476,6 +495,8 @@ export function useFirestoreData(enabled: boolean) {
     setSupplierReturns,
     supplierCreditNotes,
     setSupplierCreditNotes,
+    suppliers,
+    setSuppliers,
     cardDeposits,
     setCardDeposits,
     purchaseOrders,

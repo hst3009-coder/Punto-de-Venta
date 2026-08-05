@@ -1,5 +1,5 @@
 import React from 'react';
-import { Product, SupplierReturn, Employee, SupplierCreditNote, AccountPayable } from '../../types';
+import { Product, SupplierReturn, Employee, SupplierCreditNote, AccountPayable, PurchaseOrder, PurchaseReceipt, PayablePayment, Movement } from '../../types';
 
 const ReturnsView = React.lazy(() => import('../ReturnsView'));
 
@@ -9,6 +9,10 @@ interface DevolucionesTabProps {
   currentEmployee: Employee | null;
   supplierCreditNotes: SupplierCreditNote[];
   payables: AccountPayable[];
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
+  payablePayments?: PayablePayment[];
+  movements?: Movement[];
 }
 
 export const DevolucionesTab: React.FC<DevolucionesTabProps> = (props) => {

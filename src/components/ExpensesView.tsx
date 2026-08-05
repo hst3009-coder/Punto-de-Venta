@@ -21,8 +21,9 @@ import {
   Layers,
   Trash2
 } from 'lucide-react';
-import { Movement, Employee, DashboardConfig } from '../types';
+import { Movement, Employee, DashboardConfig, PurchaseOrder, PurchaseReceipt, AccountPayable, PayablePayment, SupplierReturn } from '../types';
 import { SupplierPicker } from './SupplierPicker';
+import { SupplierDetailModal } from './SupplierDetailModal';
 import { firestoreService } from '../lib/firebase';
 import { getStringValue } from '../lib/normalize';
 import { useAlert } from '../context/AlertContext';
@@ -34,6 +35,11 @@ interface ExpensesViewProps {
   clerkName: string;
   dashboardConfig: DashboardConfig | null;
   employees?: Employee[];
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
+  accountsPayable?: AccountPayable[];
+  payablePayments?: PayablePayment[];
+  supplierReturns?: SupplierReturn[];
 }
 
 const CATEGORY_SUGGESTIONS = [
@@ -53,9 +59,15 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   currentEmployee,
   clerkName,
   dashboardConfig,
-  employees = []
+  employees = [],
+  purchaseOrders = [],
+  purchaseReceipts = [],
+  accountsPayable = [],
+  payablePayments = [],
+  supplierReturns = [],
 }) => {
   const { showAlert, showConfirm } = useAlert();
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<string | null>(null);
 
   // Filter states
   const [datePreset, setDatePreset] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('month');
@@ -574,7 +586,14 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                         <div className="font-bold text-slate-800 max-w-xs truncate">
                           {m.supplierName ? (
                             <span>
-                              Pago a <strong className="text-slate-900 font-extrabold">{getStringValue(m.supplierName)}</strong>
+                              Pago a{' '}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSupplierForModal(getStringValue(m.supplierName))}
+                                className="text-indigo-600 hover:text-indigo-800 hover:underline font-extrabold cursor-pointer text-left"
+                              >
+                                {getStringValue(m.supplierName)}
+                              </button>
                             </span>
                           ) : (
                             getStringValue(m.concept)
@@ -946,6 +965,18 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           </div>
         )}
       </AnimatePresence>
+
+      <SupplierDetailModal
+        isOpen={!!selectedSupplierForModal}
+        onClose={() => setSelectedSupplierForModal(null)}
+        supplierName={selectedSupplierForModal}
+        purchaseOrders={purchaseOrders}
+        purchaseReceipts={purchaseReceipts}
+        accountsPayable={accountsPayable}
+        payablePayments={payablePayments}
+        movements={movements}
+        supplierReturns={supplierReturns}
+      />
     </div>
   );
 };

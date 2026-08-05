@@ -18,6 +18,7 @@ import {
   AuditLogEntry,
   PurchaseOrder,
   PurchaseReceipt,
+  Supplier,
 } from '../types';
 import {
   ArrowLeft,
@@ -44,6 +45,9 @@ import {
   Info,
   Truck,
   ShieldAlert,
+  Star,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -52,6 +56,7 @@ import { useCardDepositGenerator } from '../hooks/useCardDepositGenerator';
 import { useDashboardDateFilter } from '../hooks/useDashboardDateFilter';
 import { useAdminShiftManager } from '../hooks/useAdminShiftManager';
 import { useDashboardKPIs } from '../hooks/useDashboardKPIs';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
   return React.lazy(async () => {
@@ -111,6 +116,7 @@ interface DashboardViewProps {
   creditNotes?: CreditNote[];
   purchaseOrders?: PurchaseOrder[];
   purchaseReceipts?: PurchaseReceipt[];
+  suppliers?: Supplier[];
 }
 
 type DashboardTab =
@@ -154,11 +160,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   supplierCreditNotes = [],
   purchaseOrders = [],
   purchaseReceipts = [],
+  suppliers = [],
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const permissions = usePermissions(currentEmployee);
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('resumen');
+  const [favoriteTabs, setFavoriteTabs] = useState<DashboardTab[]>(() => {
+    try {
+      const saved = localStorage.getItem('pos_dashboard_favorite_tabs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed as DashboardTab[];
+      }
+    } catch (err) {
+      console.error('Error loading favorite tabs:', err);
+    }
+    return [];
+  });
+
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('pos_dashboard_panel_collapsed') === 'true';
+    } catch (err) {
+      return false;
+    }
+  });
+
+  const toggleFavoriteTab = (tabId: DashboardTab) => {
+    setFavoriteTabs((prev) => {
+      let next: DashboardTab[];
+      if (prev.includes(tabId)) {
+        next = prev.filter((id) => id !== tabId);
+      } else {
+        next = [...prev, tabId];
+      }
+      try {
+        localStorage.setItem('pos_dashboard_favorite_tabs', JSON.stringify(next));
+      } catch (err) {
+        console.error('Error saving favorite tabs:', err);
+      }
+      return next;
+    });
+  };
+
+  const togglePanelCollapsed = () => {
+    setIsPanelCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('pos_dashboard_panel_collapsed', next ? 'true' : 'false');
+      } catch (err) {
+        console.error('Error saving panel collapsed state:', err);
+      }
+      return next;
+    });
+  };
   const [draftOrdersForCompras, setDraftOrdersForCompras] = useState<any[]>([]);
   const [selectedClosureModal, setSelectedClosureModal] = useState<Closure | null>(null);
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
@@ -298,7 +354,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   if (!isOpen) return null;
 
-  const tabs: Array<{ id: DashboardTab; label: string; icon: React.ReactNode; badge?: number }> = [
+  const defaultTabs: Array<{ id: DashboardTab; label: string; icon: React.ReactNode; badge?: number }> = [
     { id: 'resumen', label: 'Resumen', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'ventas', label: 'Ventas', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'creditos', label: 'Créditos CxC', icon: <Users className="w-4 h-4" /> },
@@ -314,6 +370,83 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     { id: 'egresos', label: 'Egresos', icon: <CreditCard className="w-4 h-4" /> },
     { id: 'actividad', label: 'Actividad', icon: <Activity className="w-4 h-4" /> },
   ];
+
+  const tabs = React.useMemo(() => {
+    if (favoriteTabs.length === 0) return defaultTabs;
+
+    const favSet = new Set(favoriteTabs);
+    const tabMap = new Map(defaultTabs.map((t) => [t.id, t]));
+
+    const favList: typeof defaultTabs = [];
+    favoriteTabs.forEach((id) => {
+      const item = tabMap.get(id);
+      if (item) favList.push(item);
+    });
+
+    const nonFavList = defaultTabs.filter((t) => !favSet.has(t.id));
+
+    return [...favList, ...nonFavList];
+  }, [favoriteTabs]);
+
+  const canAccessTab = (tabId: DashboardTab): boolean => {
+    switch (tabId) {
+      case 'empleados':
+      case 'anomalias':
+        return !!(permissions.manageEmployees || currentEmployee?.role === 'admin');
+      case 'cuentas_pagar':
+        return permissions.managePayables !== false;
+      case 'compras':
+        return (permissions.managePurchaseOrders ?? permissions.manageProducts) !== false;
+      case 'devoluciones':
+      case 'notas_credito':
+        return permissions.manageReturns !== false;
+      case 'bancos':
+        return permissions.confirmBankDeposits !== false;
+      case 'egresos':
+        return permissions.registerExpenses !== false;
+      case 'inventario':
+        return permissions.manageProducts !== false;
+      case 'creditos':
+        return permissions.manageCustomers !== false;
+      default:
+        return true;
+    }
+  };
+
+  const handleTabShortcut = (index: number, e: KeyboardEvent) => {
+    const targetTab = tabs[index];
+    if (!targetTab) return;
+    if (!canAccessTab(targetTab.id)) return;
+
+    e.preventDefault();
+    setActiveTab(targetTab.id);
+  };
+
+  useKeyboardShortcuts(
+    {
+      'Alt+1': (e) => handleTabShortcut(0, e),
+      'Alt+2': (e) => handleTabShortcut(1, e),
+      'Alt+3': (e) => handleTabShortcut(2, e),
+      'Alt+4': (e) => handleTabShortcut(3, e),
+      'Alt+5': (e) => handleTabShortcut(4, e),
+      'Alt+6': (e) => handleTabShortcut(5, e),
+      'Alt+7': (e) => handleTabShortcut(6, e),
+      'Alt+8': (e) => handleTabShortcut(7, e),
+      'Alt+9': (e) => handleTabShortcut(8, e),
+      'Alt+0': (e) => handleTabShortcut(9, e),
+      'alt+1': (e) => handleTabShortcut(0, e),
+      'alt+2': (e) => handleTabShortcut(1, e),
+      'alt+3': (e) => handleTabShortcut(2, e),
+      'alt+4': (e) => handleTabShortcut(3, e),
+      'alt+5': (e) => handleTabShortcut(4, e),
+      'alt+6': (e) => handleTabShortcut(5, e),
+      'alt+7': (e) => handleTabShortcut(6, e),
+      'alt+8': (e) => handleTabShortcut(7, e),
+      'alt+9': (e) => handleTabShortcut(8, e),
+      'alt+0': (e) => handleTabShortcut(9, e),
+    },
+    isOpen
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 animate-fade-in h-screen w-screen overflow-hidden text-slate-800">
@@ -442,21 +575,149 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 2. Main Workspace Layout with Vertical Navigation Sidebar */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar Navigation */}
-        <aside className="w-64 shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-y-auto p-3 space-y-1 select-none">
-          {tabs.map((tab) => (
+        <aside
+          className={`${
+            isPanelCollapsed ? 'w-16 p-2' : 'w-64 p-3'
+          } shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-y-auto space-y-1 select-none transition-all duration-200`}
+        >
+          {/* Collapse / Expand Toggle Header */}
+          <div
+            className={`flex items-center pb-2 border-b border-slate-100 mb-1 ${
+              isPanelCollapsed ? 'justify-center' : 'justify-between px-1'
+            }`}
+          >
+            {!isPanelCollapsed && (
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Sub-vistas
+              </span>
+            )}
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
-                activeTab === tab.id
-                  ? 'bg-indigo-600 text-white shadow-xs font-black'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
+              type="button"
+              onClick={togglePanelCollapsed}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              title={isPanelCollapsed ? 'Expandir panel' : 'Colapsar panel'}
             >
-              <span className="shrink-0">{tab.icon}</span>
-              <span className="truncate">{tab.label}</span>
+              {isPanelCollapsed ? (
+                <PanelLeftOpen className="w-4 h-4 text-slate-600" />
+              ) : (
+                <PanelLeftClose className="w-4 h-4" />
+              )}
             </button>
-          ))}
+          </div>
+
+          {tabs.map((tab, index) => {
+            let shortcutLabel: string | null = null;
+            if (index < 9) {
+              shortcutLabel = `Alt+${index + 1}`;
+            } else if (index === 9) {
+              shortcutLabel = 'Alt+0';
+            }
+
+            const isSelected = activeTab === tab.id;
+            const isFav = favoriteTabs.includes(tab.id);
+
+            if (isPanelCollapsed) {
+              return (
+                <div key={tab.id} className="relative group flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    title={`${tab.label}${shortcutLabel ? ` (${shortcutLabel})` : ''}`}
+                    className={`w-full py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center relative cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="shrink-0">{tab.icon}</span>
+
+                    {/* Favorite star badge indicator */}
+                    {isFav && (
+                      <span className="absolute top-1 right-1">
+                        <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                      </span>
+                    )}
+
+                    {/* Shortcut indicator in collapsed mode */}
+                    {shortcutLabel && (
+                      <span
+                        className={`text-[9px] font-mono mt-0.5 font-semibold ${
+                          isSelected ? 'text-indigo-200' : 'text-slate-400'
+                        }`}
+                      >
+                        {shortcutLabel.replace('Alt+', 'A')}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Quick star toggle button on hover in collapsed mode */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavoriteTab(tab.id);
+                    }}
+                    className={`absolute -top-1 -right-1 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-md border border-slate-200 z-10 cursor-pointer ${
+                      isFav ? 'text-amber-400' : 'text-slate-300 hover:text-amber-400'
+                    }`}
+                    title={isFav ? 'Quitar de favoritos' : 'Marcar como favorita'}
+                  >
+                    <Star className={`w-3 h-3 ${isFav ? 'fill-amber-400' : ''}`} />
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <div key={tab.id} className="flex items-center group">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white shadow-xs font-black'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* Star button */}
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavoriteTab(tab.id);
+                      }}
+                      className={`p-0.5 rounded transition-colors shrink-0 ${
+                        isFav
+                          ? 'text-amber-400 hover:text-amber-300'
+                          : isSelected
+                          ? 'text-indigo-300 hover:text-white opacity-60 hover:opacity-100'
+                          : 'text-slate-300 hover:text-amber-400 opacity-60 hover:opacity-100'
+                      }`}
+                      title={isFav ? 'Quitar de favoritos' : 'Marcar como favorita'}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400' : ''}`} />
+                    </span>
+
+                    <span className="shrink-0">{tab.icon}</span>
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+
+                  {shortcutLabel && (
+                    <span
+                      className={`shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded font-medium ${
+                        isSelected
+                          ? 'bg-indigo-700/80 text-indigo-100'
+                          : 'bg-slate-100 text-slate-400 border border-slate-200'
+                      }`}
+                    >
+                      {shortcutLabel}
+                    </span>
+                  )}
+                </button>
+              </div>
+            );
+          })}
         </aside>
 
         {/* 3. Main Content Scroll Area */}
@@ -554,6 +815,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               purchaseOrders={purchaseOrders}
               purchaseReceipts={purchaseReceipts}
               payables={payables}
+              payablePayments={payablePayments}
+              movements={movements}
+              supplierReturns={supplierReturns}
+              suppliers={suppliers}
               currentEmployee={currentEmployee}
               clerkName={currentEmployee?.name || 'Administrador'}
               permissions={permissions}
@@ -571,6 +836,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               currentEmployee={currentEmployee}
               dashboardConfig={dashboardConfig}
               supplierCreditNotes={supplierCreditNotes}
+              purchaseOrders={purchaseOrders}
+              purchaseReceipts={purchaseReceipts}
+              movements={movements}
+              supplierReturns={supplierReturns}
             />
           )}
 
@@ -581,6 +850,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               currentEmployee={currentEmployee}
               supplierCreditNotes={supplierCreditNotes}
               payables={payables}
+              purchaseOrders={purchaseOrders}
+              purchaseReceipts={purchaseReceipts}
+              payablePayments={payablePayments}
+              movements={movements}
             />
           )}
 
@@ -637,6 +910,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               clerkName={currentEmployee?.name || 'Administrador'}
               dashboardConfig={dashboardConfig}
               employees={employees}
+              purchaseOrders={purchaseOrders}
+              purchaseReceipts={purchaseReceipts}
+              accountsPayable={payables}
+              payablePayments={payablePayments}
+              supplierReturns={supplierReturns}
             />
           )}
 

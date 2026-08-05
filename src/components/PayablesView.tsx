@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { AccountPayable, PayablePayment, Product, Employee, Movement, DashboardConfig, SupplierCreditNote } from '../types';
+import { AccountPayable, PayablePayment, Product, Employee, Movement, DashboardConfig, SupplierCreditNote, PurchaseOrder, PurchaseReceipt, SupplierReturn } from '../types';
 import { SupplierPicker } from './SupplierPicker';
+import { SupplierDetailModal } from './SupplierDetailModal';
 import { firestoreService } from '../lib/firebase';
 import { useAlert } from '../context/AlertContext';
 import { getPayableBalance } from '../lib/payableDebt';
 import { usePermissions } from '../hooks/usePermissions';
 import { getStringValue } from '../lib/normalize';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { isFuzzyMatch } from '../lib/textSearch';
 import { 
   Search, 
   Plus, 
@@ -35,6 +38,10 @@ interface PayablesViewProps {
   supplierCreditNotes?: SupplierCreditNote[];
   currentEmployee: Employee | null;
   dashboardConfig?: DashboardConfig;
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
+  movements?: Movement[];
+  supplierReturns?: SupplierReturn[];
 }
 
 export const PayablesView: React.FC<PayablesViewProps> = ({
@@ -44,9 +51,14 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
   supplierCreditNotes = [],
   currentEmployee,
   dashboardConfig,
+  purchaseOrders = [],
+  purchaseReceipts = [],
+  movements = [],
+  supplierReturns = [],
 }) => {
   const { showAlert, showConfirm } = useAlert();
   const permissions = usePermissions(currentEmployee);
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPayableId, setSelectedPayableId] = useState<string | null>(null);
   
@@ -112,16 +124,17 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
       .sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
   }, [payablePayments, selectedPayableId]);
 
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
+
   // Main filtered and sorted payables list
   const filteredPayables = useMemo(() => {
     let list = [...payables];
 
     // Filter by search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+    if (debouncedSearchQuery.trim()) {
       list = list.filter(p => 
-        getStringValue(p.supplierName).toLowerCase().includes(q) || 
-        getStringValue(p.concept).toLowerCase().includes(q)
+        isFuzzyMatch(debouncedSearchQuery, getStringValue(p.supplierName)) || 
+        isFuzzyMatch(debouncedSearchQuery, getStringValue(p.concept))
       );
     }
 
@@ -142,7 +155,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
     list.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
     return list;
-  }, [payables, payablePayments, searchQuery, filterTab]);
+  }, [payables, payablePayments, debouncedSearchQuery, filterTab]);
 
   // Reset payable form
   const resetForm = () => {
@@ -558,9 +571,16 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-black uppercase text-slate-800">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSupplierForModal(getStringValue(item.supplierName));
+                          }}
+                          className="text-xs font-black uppercase text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer text-left"
+                        >
                           {getStringValue(item.supplierName)}
-                        </span>
+                        </button>
                         {bal > 0 ? (
                           <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${daysInfo.color}`}>
                             {daysInfo.text}
@@ -691,7 +711,13 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                 <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h4 className="text-xs font-black text-slate-800 uppercase">{getStringValue(selectedPayable.supplierName)}</h4>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSupplierForModal(getStringValue(selectedPayable.supplierName))}
+                        className="text-xs font-black text-indigo-600 hover:text-indigo-800 hover:underline uppercase text-left cursor-pointer"
+                      >
+                        {getStringValue(selectedPayable.supplierName)}
+                      </button>
                       <p className="text-[10px] text-slate-500 font-medium">{getStringValue(selectedPayable.concept)}</p>
                     </div>
                     <span className="text-[9px] font-mono font-bold text-slate-500">
@@ -886,6 +912,18 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
         </div>
 
       </div>
+
+      <SupplierDetailModal
+        isOpen={!!selectedSupplierForModal}
+        onClose={() => setSelectedSupplierForModal(null)}
+        supplierName={selectedSupplierForModal}
+        purchaseOrders={purchaseOrders}
+        purchaseReceipts={purchaseReceipts}
+        accountsPayable={payables}
+        payablePayments={payablePayments}
+        movements={movements}
+        supplierReturns={supplierReturns}
+      />
 
     </div>
   );

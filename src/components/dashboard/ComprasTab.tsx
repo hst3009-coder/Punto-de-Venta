@@ -8,11 +8,17 @@ import {
   Employee,
   EmployeePermissions,
   AccountPayable,
+  PayablePayment,
+  Movement,
+  SupplierReturn,
+  Supplier,
 } from '../../types';
 import { SupplierPicker } from '../SupplierPicker';
+import { SupplierDetailModal } from '../SupplierDetailModal';
 import { firestoreService, BatchOperation } from '../../lib/firebase';
 import { increment } from 'firebase/firestore';
 import { getRestockSuggestions, RestockSuggestion } from '../../lib/restockSuggestions';
+import { matchesProductSearch, rankSearchResults } from '../../lib/search';
 import {
   Truck,
   Plus,
@@ -28,6 +34,8 @@ import {
   ArrowDownToLine,
   ChevronDown,
   ChevronUp,
+  Printer,
+  MessageSquare,
 } from 'lucide-react';
 
 export interface DraftOrderGroup {
@@ -46,12 +54,16 @@ interface ComprasTabProps {
   purchaseOrders: PurchaseOrder[];
   purchaseReceipts: PurchaseReceipt[];
   payables?: AccountPayable[];
+  payablePayments?: PayablePayment[];
+  movements?: Movement[];
+  supplierReturns?: SupplierReturn[];
   currentEmployee: Employee | null;
   clerkName: string;
   permissions: EmployeePermissions;
   showAlert: (msg: string) => void;
   initialDraftOrders?: DraftOrderGroup[];
   onClearDrafts?: () => void;
+  suppliers?: Supplier[];
 }
 
 export const ComprasTab: React.FC<ComprasTabProps> = ({
@@ -60,6 +72,10 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
   purchaseOrders,
   purchaseReceipts,
   payables = [],
+  payablePayments = [],
+  movements = [],
+  supplierReturns = [],
+  suppliers = [],
   currentEmployee,
   clerkName,
   permissions,
@@ -67,6 +83,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
   initialDraftOrders,
   onClearDrafts,
 }) => {
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<string | null>(null);
   const canManage = permissions.managePurchaseOrders ?? permissions.manageProducts;
 
   // Compute restock suggestions for items needing restock (< 7 days coverage)
@@ -106,21 +123,87 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
 
   const handleSupplierChange = (supplierName: string) => {
     setNewSupplier(supplierName);
-    if (supplierName.trim()) {
-      const matching = restockSuggestions.filter(
-        (s) => s.product.provider?.trim().toLowerCase() === supplierName.trim().toLowerCase()
-      );
-      if (matching.length > 0 && newItems.length === 0) {
-        setNewItems(
-          matching.map((s) => ({
-            productId: s.product.id,
-            productName: s.product.name,
-            quantityOrdered: s.suggestedQty,
-            estimatedCost: s.product.cost || 0,
-          }))
+  };
+
+  const supplierSuggestedProducts = useMemo(() => {
+    if (!newSupplier || !newSupplier.trim()) return [];
+    const normalizedSupplier = newSupplier.trim().toLowerCase();
+
+    const restockMap = new Map<string, RestockSuggestion>();
+    restockSuggestions.forEach((s) => {
+      restockMap.set(s.product.id, s);
+    });
+
+    return products
+      .filter((p) => p.provider && p.provider.trim().toLowerCase() === normalizedSupplier)
+      .filter((p) => {
+        const currentStock = p.stock || 0;
+        const isOutStock = currentStock <= 0;
+        const isBelowMin = p.minStock !== undefined && p.minStock !== null && currentStock <= p.minStock;
+        const hasRestockSug = restockMap.has(p.id);
+
+        return isOutStock || isBelowMin || hasRestockSug;
+      })
+      .map((p) => {
+        const currentStock = p.stock || 0;
+        const restockSug = restockMap.get(p.id);
+        let suggestedQty = 1;
+
+        if (restockSug) {
+          suggestedQty = restockSug.suggestedQty;
+        } else {
+          const targetMax = p.maxStock || (p.minStock ? p.minStock * 2 : 10);
+          suggestedQty = Math.max(1, targetMax - currentStock);
+        }
+
+        const isOutStock = currentStock <= 0;
+        const isBelowMin = p.minStock !== undefined && p.minStock !== null && currentStock <= p.minStock;
+
+        let statusType: 'out_of_stock' | 'below_min' | 'velocity' = 'velocity';
+        if (isOutStock) {
+          statusType = 'out_of_stock';
+        } else if (isBelowMin) {
+          statusType = 'below_min';
+        }
+
+        return {
+          product: p,
+          currentStock,
+          minStock: p.minStock ?? null,
+          maxStock: p.maxStock ?? null,
+          suggestedQty,
+          statusType,
+          hasRestockSug: !!restockSug,
+        };
+      });
+  }, [newSupplier, products, restockSuggestions]);
+
+  const handleAddSuggestedProduct = (prod: Product, suggestedQty: number) => {
+    setNewItems((prev) => {
+      const existingIndex = prev.findIndex((item) => item.productId === prod.id);
+      if (existingIndex >= 0) {
+        return prev.map((item, idx) =>
+          idx === existingIndex
+            ? { ...item, quantityOrdered: suggestedQty }
+            : item
         );
       }
-    }
+      return [
+        ...prev,
+        {
+          productId: prod.id,
+          productName: prod.name,
+          quantityOrdered: suggestedQty,
+          estimatedCost: prod.cost || 0,
+        },
+      ];
+    });
+  };
+
+  const handleAddAllSuggestedProducts = () => {
+    supplierSuggestedProducts.forEach((sp) => {
+      handleAddSuggestedProduct(sp.product, sp.suggestedQty);
+    });
   };
 
   const handleSelectSupplierGroup = (supplierName: string, items: RestockSuggestion[]) => {
@@ -146,6 +229,35 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
     }
   }, [initialDraftOrders]);
 
+  // PARTE B: Auto-add out-of-stock products when supplier is selected
+  const prevSupplierRef = React.useRef<string>('');
+
+  React.useEffect(() => {
+    const norm = newSupplier.trim().toLowerCase();
+    if (norm && norm !== prevSupplierRef.current) {
+      prevSupplierRef.current = norm;
+      const outOfStockItems = supplierSuggestedProducts.filter((sp) => sp.statusType === 'out_of_stock');
+      if (outOfStockItems.length > 0) {
+        setNewItems((prev) => {
+          const next = [...prev];
+          outOfStockItems.forEach((sp) => {
+            if (!next.some((item) => item.productId === sp.product.id)) {
+              next.push({
+                productId: sp.product.id,
+                productName: sp.product.name,
+                quantityOrdered: sp.suggestedQty,
+                estimatedCost: sp.product.cost || 0,
+              });
+            }
+          });
+          return next;
+        });
+      }
+    } else if (!norm) {
+      prevSupplierRef.current = '';
+    }
+  }, [newSupplier, supplierSuggestedProducts]);
+
   // Receive items Modal state
   const [receivingPo, setReceivingPo] = useState<PurchaseOrder | null>(null);
   const [receptionInputs, setReceptionInputs] = useState<
@@ -157,6 +269,23 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
 
   // Cancellation Modal state
   const [cancellingPo, setCancellingPo] = useState<PurchaseOrder | null>(null);
+
+  // WhatsApp / Print Action modal states
+  const [actionPo, setActionPo] = useState<PurchaseOrder | null>(null);
+  const [actionType, setActionType] = useState<'whatsapp' | 'print' | null>(null);
+  const [printablePo, setPrintablePo] = useState<{ po: PurchaseOrder; includePrices: boolean } | null>(null);
+  const [duplicateWarningModalOpen, setDuplicateWarningModalOpen] = useState(false);
+
+  // Duplicate Order Detection
+  const existingOpenOrderForSupplier = useMemo(() => {
+    if (!newSupplier.trim()) return null;
+    const norm = newSupplier.trim().toLowerCase();
+    return purchaseOrders.find(
+      (po) =>
+        (po.status === 'open' || po.status === 'partial') &&
+        po.supplierName.trim().toLowerCase() === norm
+    ) || null;
+  }, [newSupplier, purchaseOrders]);
 
   // Computed KPIs
   const openOrPartialOrdersCount = useMemo(() => {
@@ -177,15 +306,8 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
   // Product search results for new PO form
   const searchedProducts = useMemo(() => {
     if (!productSearch.trim()) return [];
-    const q = productSearch.toLowerCase();
-    return products
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.barcode && p.barcode.toLowerCase().includes(q)) ||
-          (p.category && p.category.toLowerCase().includes(q))
-      )
-      .slice(0, 8);
+    const textMatches = products.filter((p) => matchesProductSearch(p, productSearch));
+    return rankSearchResults(textMatches, productSearch).slice(0, 8);
   }, [products, productSearch]);
 
   const handleAddProductToOrder = (product: Product) => {
@@ -228,9 +350,18 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
     );
   };
 
-  const newOrderTotalEstimated = useMemo(() => {
+  // Order Total calculations with 18% ITBIS
+  const newOrderSubtotal = useMemo(() => {
     return newItems.reduce((acc, item) => acc + item.quantityOrdered * item.estimatedCost, 0);
   }, [newItems]);
+
+  const newOrderITBIS = useMemo(() => {
+    return newOrderSubtotal * 0.18;
+  }, [newOrderSubtotal]);
+
+  const newOrderTotalEstimated = useMemo(() => {
+    return newOrderSubtotal * 1.18;
+  }, [newOrderSubtotal]);
 
   const handleCreatePurchaseOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,6 +374,16 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
       return;
     }
 
+    if (existingOpenOrderForSupplier) {
+      setDuplicateWarningModalOpen(true);
+      return;
+    }
+
+    await saveNewPurchaseOrder();
+  };
+
+  const saveNewPurchaseOrder = async () => {
+    setDuplicateWarningModalOpen(false);
     const poId = `po_${Date.now()}`;
     const newOrder: PurchaseOrder = {
       id: poId,
@@ -284,6 +425,77 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
     } catch (err) {
       console.error('Error creating purchase order:', err);
       showAlert('Error al crear la orden de compra en el servidor.');
+    }
+  };
+
+  // WhatsApp & Print Action handlers
+  const handleOpenActionModal = (po: PurchaseOrder, type: 'whatsapp' | 'print') => {
+    setActionPo(po);
+    setActionType(type);
+  };
+
+  const handleConfirmAction = (includePrices: boolean) => {
+    if (!actionPo || !actionType) return;
+
+    if (actionType === 'whatsapp') {
+      const normSupp = actionPo.supplierName.trim().toLowerCase();
+      const matchedSupplier = suppliers.find((s) => s.name.trim().toLowerCase() === normSupp);
+
+      if (!matchedSupplier || !matchedSupplier.phone || !matchedSupplier.phone.trim()) {
+        showAlert(
+          `El proveedor "${actionPo.supplierName}" no tiene un teléfono guardado en la base de datos de Proveedores. Agrega su teléfono en Configuración -> Proveedores para enviar por WhatsApp.`
+        );
+        setActionPo(null);
+        setActionType(null);
+        return;
+      }
+
+      const cleanPhone = matchedSupplier.phone.replace(/[^\d+]/g, '');
+      const dateStr = actionPo.createdAt ? new Date(actionPo.createdAt).toLocaleDateString('es-DO') : '-';
+
+      let msg = `*ORDEN DE COMPRA #${actionPo.id.slice(-6).toUpperCase()}*\n`;
+      msg += `Proveedor: ${actionPo.supplierName}\n`;
+      msg += `Fecha: ${dateStr}\n\n`;
+      msg += `*PRODUCTOS A SOLICITAR:*\n`;
+
+      let subtotal = 0;
+      actionPo.items.forEach((item, idx) => {
+        const itemCostWithTax = item.estimatedCost * 1.18;
+        const lineTotalWithTax = item.quantityOrdered * item.estimatedCost * 1.18;
+        subtotal += item.quantityOrdered * item.estimatedCost;
+
+        if (includePrices) {
+          msg += `${idx + 1}. ${item.productName}: ${item.quantityOrdered} un. @ RD$ ${itemCostWithTax.toFixed(2)} (ITBIS incl.) = RD$ ${lineTotalWithTax.toFixed(2)}\n`;
+        } else {
+          msg += `${idx + 1}. ${item.productName}: ${item.quantityOrdered} un.\n`;
+        }
+      });
+
+      if (includePrices) {
+        const itbis = subtotal * 0.18;
+        const total = subtotal * 1.18;
+        msg += `\n*Subtotal base:* RD$ ${subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
+        msg += `\n*ITBIS (18%):* RD$ ${itbis.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
+        msg += `\n*Total Estimado (ITBIS 18% incl.):* RD$ ${total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
+      } else {
+        const totalUnits = actionPo.items.reduce((a, b) => a + b.quantityOrdered, 0);
+        msg += `\nTotal: ${actionPo.items.length} producto(s) (${totalUnits} unidades).`;
+      }
+
+      msg += `\n\n_Generado desde el sistema POS._`;
+
+      const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+      window.open(waUrl, '_blank');
+      setActionPo(null);
+      setActionType(null);
+    } else if (actionType === 'print') {
+      const currentPo = actionPo;
+      setPrintablePo({ po: currentPo, includePrices });
+      setActionPo(null);
+      setActionType(null);
+      setTimeout(() => {
+        window.print();
+      }, 250);
     }
   };
 
@@ -623,7 +835,15 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                       <td className="p-4 font-mono font-bold text-slate-900">
                         #{po.id.slice(-6).toUpperCase()}
                       </td>
-                      <td className="p-4 font-bold text-slate-800">{po.supplierName}</td>
+                      <td className="p-4 font-bold text-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSupplierForModal(po.supplierName)}
+                          className="text-indigo-600 hover:text-indigo-800 hover:underline font-bold text-left cursor-pointer"
+                        >
+                          {po.supplierName}
+                        </button>
+                      </td>
                       <td className="p-4">
                         {po.status === 'open' && (
                           <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 font-extrabold rounded-lg text-[10px] uppercase inline-flex items-center gap-1">
@@ -675,10 +895,27 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                         </div>
                       </td>
                       <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
+                            type="button"
+                            onClick={() => handleOpenActionModal(po, 'whatsapp')}
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                            title="Enviar por WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenActionModal(po, 'print')}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                            title="Imprimir Orden"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setViewingPo(po)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1"
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1"
                           >
                             <FileText className="w-3.5 h-3.5" />
                             <span>Detalle</span>
@@ -740,42 +977,182 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                   onChange={handleSupplierChange}
                   products={products}
                   payables={payables}
+                  suppliers={suppliers}
                   placeholder="Selecciona o escribe el proveedor..."
                 />
               </div>
 
-              {/* Restock suggestions helper when supplier is selected */}
-              {newSupplier.trim() && (() => {
-                const matching = restockSuggestions.filter(
-                  (s) => s.product.provider?.trim().toLowerCase() === newSupplier.trim().toLowerCase()
-                );
-                if (matching.length === 0) return null;
-                return (
-                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-amber-900 shadow-2xs">
-                    <div className="flex items-center gap-2 font-medium">
-                      <Package className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>
-                        Hay <strong>{matching.length}</strong> {matching.length === 1 ? 'producto' : 'productos'} de <strong className="font-bold">{newSupplier}</strong> con stock bajo (&lt; 7 días).
+              {/* Advertencia de Orden Duplicada Existente */}
+              {existingOpenOrderForSupplier && (
+                <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-extrabold text-amber-900 block">
+                        Ya existe una orden abierta/parcial con {existingOpenOrderForSupplier.supplierName}
+                      </span>
+                      <p className="text-amber-800 text-[11px] font-medium mt-0.5">
+                        Creada el {existingOpenOrderForSupplier.createdAt ? new Date(existingOpenOrderForSupplier.createdAt).toLocaleDateString('es-DO') : '-'}.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateModalOpen(false);
+                      setViewingPo(existingOpenOrderForSupplier);
+                    }}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl transition-colors shrink-0 cursor-pointer shadow-2xs"
+                  >
+                    Ver orden existente
+                  </button>
+                </div>
+              )}
+
+              {/* Total Estimado Destacado con ITBIS 18% */}
+              <div className="bg-indigo-900 text-white p-4 rounded-2xl border border-indigo-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-black uppercase text-indigo-300 tracking-wider">
+                    Total Estimado (ITBIS 18% incluido)
+                  </div>
+                  <div className="text-2xl font-black font-mono text-white mt-0.5">
+                    RD$ {newOrderTotalEstimated.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div className="text-right text-xs text-indigo-200 space-y-0.5 border-t sm:border-t-0 sm:border-l border-indigo-700/60 pt-2 sm:pt-0 sm:pl-4">
+                  <div>Subtotal base: <span className="font-mono font-bold text-white">RD$ {newOrderSubtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
+                  <div>ITBIS (18%): <span className="font-mono font-bold text-amber-300">RD$ {newOrderITBIS.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
+                </div>
+              </div>
+
+              {/* Productos sugeridos del proveedor seleccionado */}
+              {newSupplier.trim() && (
+                <div className="space-y-3 bg-slate-50/80 border border-slate-200 p-4 rounded-2xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                        Productos sugeridos de {newSupplier}
+                      </h4>
+                      <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[10px] rounded-full">
+                        {supplierSuggestedProducts.length} {supplierSuggestedProducts.length === 1 ? 'sugerencia' : 'sugerencias'}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const preloaded = matching.map((s) => ({
-                          productId: s.product.id,
-                          productName: s.product.name,
-                          quantityOrdered: s.suggestedQty,
-                          estimatedCost: s.product.cost || 0,
-                        }));
-                        setNewItems(preloaded);
-                      }}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0 shadow-2xs"
-                    >
-                      {newItems.length === 0 ? 'Cargar Sugeridos' : 'Reemplazar con Sugeridos'}
-                    </button>
+
+                    {supplierSuggestedProducts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleAddAllSuggestedProducts}
+                        className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] rounded-xl transition-colors cursor-pointer shrink-0 shadow-2xs"
+                      >
+                        + Agregar todos a la orden
+                      </button>
+                    )}
                   </div>
-                );
-              })()}
+
+                  {supplierSuggestedProducts.length === 0 ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Todos los productos de <strong>{newSupplier}</strong> cuentan con stock suficiente. Puedes buscar y agregar productos manualmente abajo.</span>
+                    </div>
+                  ) : (
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                      <div className="max-h-60 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100/90 text-slate-600 font-extrabold text-[10px] uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200">
+                            <tr>
+                              <th className="py-2.5 px-3">Producto</th>
+                              <th className="py-2.5 px-3 text-center">Stock Actual</th>
+                              <th className="py-2.5 px-3 text-center">Stock de Seguridad</th>
+                              <th className="py-2.5 px-3 text-center">Cant. Sugerida</th>
+                              <th className="py-2.5 px-3 text-right">Acción</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {supplierSuggestedProducts.map((sp) => {
+                              const isAdded = newItems.some((item) => item.productId === sp.product.id);
+
+                              let rowBgClass = 'bg-white hover:bg-slate-50';
+                              let statusBadge = null;
+
+                              if (sp.statusType === 'out_of_stock') {
+                                rowBgClass = 'bg-rose-50/80 hover:bg-rose-100/80 border-rose-100';
+                                statusBadge = (
+                                  <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 font-black text-[9px] uppercase rounded-md shrink-0">
+                                    Agotado (0)
+                                  </span>
+                                );
+                              } else if (sp.statusType === 'below_min') {
+                                rowBgClass = 'bg-amber-50/80 hover:bg-amber-100/80 border-amber-100';
+                                statusBadge = (
+                                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 font-black text-[9px] uppercase rounded-md shrink-0">
+                                    Bajo Mínimo
+                                  </span>
+                                );
+                              } else {
+                                rowBgClass = 'bg-sky-50/70 hover:bg-sky-100/80 border-sky-100';
+                                statusBadge = (
+                                  <span className="px-2 py-0.5 bg-sky-100 text-sky-800 border border-sky-300 font-black text-[9px] uppercase rounded-md shrink-0">
+                                    Alta Rotación
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <tr key={sp.product.id} className={`${rowBgClass} transition-colors`}>
+                                  <td className="py-2.5 px-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="min-w-0">
+                                        <div className="font-bold text-slate-800 truncate" title={sp.product.name}>
+                                          {sp.product.name}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 font-mono">
+                                          {sp.product.barcode ? `SKU: ${sp.product.barcode}` : sp.product.category || 'Sin categoría'}
+                                        </div>
+                                      </div>
+                                      {statusBadge}
+                                    </div>
+                                  </td>
+
+                                  <td className="py-2.5 px-3 text-center">
+                                    <span className={`font-mono font-black text-xs ${sp.currentStock <= 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                                      {sp.currentStock}
+                                    </span>
+                                  </td>
+
+                                  <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-600">
+                                    {sp.minStock !== null ? sp.minStock : '-'}
+                                  </td>
+
+                                  <td className="py-2.5 px-3 text-center">
+                                    <span className="font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg text-xs">
+                                      {sp.suggestedQty}
+                                    </span>
+                                  </td>
+
+                                  <td className="py-2.5 px-3 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddSuggestedProduct(sp.product, sp.suggestedQty)}
+                                      className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer shadow-2xs ${
+                                        isAdded
+                                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                      }`}
+                                    >
+                                      {isAdded ? 'Agregado ✓' : 'Agregar a la orden'}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Restock suggestions grouped by supplier when NO supplier selected yet */}
               {!newSupplier.trim() && restockSuggestions.length > 0 && (
@@ -830,6 +1207,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
+                    autoComplete="off"
                     placeholder="Buscar producto por nombre o código de barras..."
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
@@ -1215,16 +1593,191 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenActionModal(viewingPo, 'whatsapp')}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Enviar por WhatsApp</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenActionModal(viewingPo, 'print')}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setViewingPo(null)}
-                className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
               >
                 Cerrar
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MODAL: Preguntar si incluir precios/costos para WhatsApp / Imprimir */}
+      {actionPo && actionType && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className={`p-3 rounded-2xl ${actionType === 'whatsapp' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-800'}`}>
+                {actionType === 'whatsapp' ? <MessageSquare className="w-6 h-6" /> : <Printer className="w-6 h-6" />}
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {actionType === 'whatsapp' ? 'Enviar Orden por WhatsApp' : 'Imprimir Orden de Compra'}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Orden #{actionPo.id.slice(-6).toUpperCase()} • {actionPo.supplierName}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 font-medium leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+              ¿Deseas incluir los <strong>precios/costos estimados con ITBIS (18%)</strong> en el {actionType === 'whatsapp' ? 'mensaje de WhatsApp' : 'documento a imprimir'} o solo el listado de productos y cantidades?
+            </p>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleConfirmAction(true)}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+              >
+                Sí, incluir precios con ITBIS (18%)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmAction(false)}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                No, solo productos y cantidades
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionPo(null);
+                  setActionType(null);
+                }}
+                className="w-full py-2 text-slate-400 hover:text-slate-600 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Advertencia de Orden Duplicada al guardar nueva orden */}
+      {duplicateWarningModalOpen && existingOpenOrderForSupplier && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <h3 className="text-base font-black text-slate-900">Orden Abierta Existente</h3>
+            </div>
+            <p className="text-xs text-slate-700 leading-relaxed bg-amber-50 p-3.5 rounded-2xl border border-amber-200">
+              Ya existe una orden abierta o parcial para <strong>{existingOpenOrderForSupplier.supplierName}</strong> (creada el {existingOpenOrderForSupplier.createdAt ? new Date(existingOpenOrderForSupplier.createdAt).toLocaleDateString('es-DO') : '-'}).
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateWarningModalOpen(false);
+                  setIsCreateModalOpen(false);
+                  setViewingPo(existingOpenOrderForSupplier);
+                }}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Ir a la orden existente para editarla
+              </button>
+              <button
+                type="button"
+                onClick={saveNewPurchaseOrder}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Crear una nueva orden de todas formas
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuplicateWarningModalOpen(false)}
+                className="w-full py-2 text-slate-400 hover:text-slate-600 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONTENEDOR OCULTO PARA IMPRESIÓN */}
+      {printablePo && (
+        <div className="hidden print:block fixed inset-0 bg-white p-8 text-black z-[9999] font-sans">
+          <div className="text-center border-b pb-4 mb-4">
+            <h1 className="text-xl font-black uppercase">ORDEN DE COMPRA</h1>
+            <p className="text-sm font-mono font-bold">#{printablePo.po.id.slice(-6).toUpperCase()}</p>
+            <p className="text-xs text-gray-600">Fecha: {printablePo.po.createdAt ? new Date(printablePo.po.createdAt).toLocaleDateString('es-DO') : '-'}</p>
+          </div>
+
+          <div className="mb-4 text-xs space-y-1">
+            <p><strong>Proveedor:</strong> {printablePo.po.supplierName}</p>
+            <p><strong>Solicitado por:</strong> {printablePo.po.employeeName || clerkName}</p>
+          </div>
+
+          <table className="w-full text-xs border-collapse border border-gray-300 mb-4">
+            <thead>
+              <tr className="bg-gray-100 border-b border-gray-300">
+                <th className="p-2 text-left border-r border-gray-300">Producto</th>
+                <th className="p-2 text-center border-r border-gray-300">Cant. Ordenada</th>
+                {printablePo.includePrices && (
+                  <>
+                    <th className="p-2 text-right border-r border-gray-300">Costo un. (ITBIS incl.)</th>
+                    <th className="p-2 text-right">Total (ITBIS incl.)</th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {printablePo.po.items.map((item) => {
+                const itemCostWithTax = item.estimatedCost * 1.18;
+                const lineTotalWithTax = item.quantityOrdered * item.estimatedCost * 1.18;
+                return (
+                  <tr key={item.productId} className="border-b border-gray-200">
+                    <td className="p-2 border-r border-gray-300 font-bold">{item.productName}</td>
+                    <td className="p-2 text-center border-r border-gray-300 font-mono font-bold">{item.quantityOrdered}</td>
+                    {printablePo.includePrices && (
+                      <>
+                        <td className="p-2 text-right border-r border-gray-300 font-mono">RD$ {itemCostWithTax.toFixed(2)}</td>
+                        <td className="p-2 text-right font-mono font-bold">RD$ {lineTotalWithTax.toFixed(2)}</td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {printablePo.includePrices && (() => {
+            const subtotal = printablePo.po.items.reduce((a, b) => a + b.quantityOrdered * b.estimatedCost, 0);
+            const itbis = subtotal * 0.18;
+            const total = subtotal * 1.18;
+            return (
+              <div className="text-right text-xs space-y-1 mt-4 border-t border-gray-300 pt-3">
+                <p>Subtotal base: <strong>RD$ {subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></p>
+                <p>ITBIS (18%): <strong>RD$ {itbis.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></p>
+                <p className="font-bold text-sm">Total Estimado (ITBIS 18% incl.): RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</p>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1259,6 +1812,18 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
           </div>
         </div>
       )}
+
+      <SupplierDetailModal
+        isOpen={!!selectedSupplierForModal}
+        onClose={() => setSelectedSupplierForModal(null)}
+        supplierName={selectedSupplierForModal}
+        purchaseOrders={purchaseOrders}
+        purchaseReceipts={purchaseReceipts}
+        accountsPayable={payables}
+        payablePayments={payablePayments}
+        movements={movements}
+        supplierReturns={supplierReturns}
+      />
     </div>
   );
 };

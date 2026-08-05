@@ -147,6 +147,7 @@ export default function App() {
     setSupplierReturns,
     supplierCreditNotes,
     setSupplierCreditNotes,
+    suppliers,
     cardDeposits,
     setCardDeposits,
     purchaseOrders,
@@ -1558,6 +1559,7 @@ export default function App() {
                     id="pos-search-input"
                     ref={searchInputRef}
                     type="text"
+                    autoComplete="off"
                     placeholder="Buscar producto por nombre, categoría o escanee código de barras... (Ctrl + K)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -2252,6 +2254,7 @@ export default function App() {
             closures={closures}
             currentEmployee={currentEmployee}
             cardDeposits={cardDeposits}
+            suppliers={suppliers}
           />
         </React.Suspense>
       )}

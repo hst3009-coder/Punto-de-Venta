@@ -4,6 +4,8 @@ import { X, Receipt } from 'lucide-react';
 import { firestoreService } from '../lib/firebase';
 import { increment } from 'firebase/firestore';
 import { getSaleTimestamp } from '../lib/dates';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { isFuzzyMatch } from '../lib/textSearch';
 import { TicketsSearchList } from './tickets/TicketsSearchList';
 import { CancelSaleFlow } from './tickets/CancelSaleFlow';
 import { ReturnItemFlow } from './tickets/ReturnItemFlow';
@@ -162,10 +164,12 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
     }
   }, [salesHistory, currentEmployee, closures]);
 
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
+
   // Filtered sales based on filterType and search query
   const filteredSales = useMemo(() => {
     return salesHistory.filter((sale) => {
-      const cleanQuery = searchQuery.trim().toLowerCase();
+      const cleanQuery = debouncedSearchQuery.trim();
 
       if (cleanQuery === '') {
         if (filterType === 'shift') {
@@ -179,10 +183,10 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
         return true;
       }
 
-      const matchTicket = sale.ticketNumber.toLowerCase().includes(cleanQuery);
-      const matchAmount = sale.total.toFixed(2).includes(cleanQuery);
+      const matchTicket = isFuzzyMatch(cleanQuery, sale.ticketNumber);
+      const matchAmount = sale.total.toFixed(2).includes(cleanQuery.toLowerCase());
       const matchProduct = sale.items.some((item) =>
-        item.product.name.toLowerCase().includes(cleanQuery)
+        isFuzzyMatch(cleanQuery, item.product.name)
       );
 
       const matchesSearch = matchTicket || matchAmount || matchProduct;
@@ -193,7 +197,7 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
         return matchesSearch && isSaleFromSelectedDate(sale);
       }
     });
-  }, [salesHistory, searchQuery, selectedDateStr, filterType, shiftSales]);
+  }, [salesHistory, searchQuery, debouncedSearchQuery, selectedDateStr, filterType, shiftSales]);
 
   if (!isOpen) return null;
 

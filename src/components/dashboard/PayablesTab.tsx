@@ -1,5 +1,5 @@
 import React from 'react';
-import { Product, AccountPayable, PayablePayment, Employee, DashboardConfig, SupplierCreditNote } from '../../types';
+import { Product, AccountPayable, PayablePayment, Employee, DashboardConfig, SupplierCreditNote, PurchaseOrder, PurchaseReceipt, Movement, SupplierReturn } from '../../types';
 
 const PayablesView = React.lazy(() => import('../PayablesView'));
 
@@ -10,6 +10,10 @@ interface PayablesTabProps {
   currentEmployee: Employee | null;
   dashboardConfig: DashboardConfig;
   supplierCreditNotes: SupplierCreditNote[];
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
+  movements?: Movement[];
+  supplierReturns?: SupplierReturn[];
 }
 
 export const PayablesTab: React.FC<PayablesTabProps> = (props) => {

@@ -4,6 +4,8 @@ import { firestoreService } from '../lib/firebase';
 import { useAlert } from '../context/AlertContext';
 import { getSaleTimestamp } from '../lib/dates';
 import { getCustomerDebt } from '../lib/customerDebt';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { isFuzzyMatch } from '../lib/textSearch';
 import { 
   Users, 
   Search, 
@@ -111,14 +113,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return Object.values(customerDebts).reduce((sum: number, val: number) => sum + val, 0);
   }, [customerDebts]);
 
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
+
   // Filter customers by search query
   const filteredCustomers = useMemo(() => {
     return customers.filter(c => 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.phone && c.phone.includes(searchQuery)) ||
-      (c.email && c.email.toLowerCase().includes(searchQuery.toLowerCase()))
+      isFuzzyMatch(debouncedSearchQuery, c.name) ||
+      (c.phone && isFuzzyMatch(debouncedSearchQuery, c.phone)) ||
+      (c.email && isFuzzyMatch(debouncedSearchQuery, c.email))
     ).sort((a, b) => a.name.localeCompare(b.name));
-  }, [customers, searchQuery]);
+  }, [customers, debouncedSearchQuery]);
 
   const selectedCustomer = useMemo(() => {
     return customers.find(c => c.id === selectedCustomerId) || null;

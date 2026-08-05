@@ -43,12 +43,33 @@ export function useKeyboardShortcuts(
 
       let handler: ShortcutHandler | undefined;
 
-      // Support combination shortcuts like 'ctrl+k' or 'Control+k'
-      if (e.ctrlKey && (e.key === 'k' || e.key === 'K')) {
+      // Support combination shortcuts like 'alt+1' or 'Alt+1' or 'alt+Digit1'
+      if (e.altKey) {
+        const keyLower = e.key ? e.key.toLowerCase() : '';
+        const codeLower = e.code ? e.code.toLowerCase() : '';
+        const digitMatch = e.code ? e.code.replace('Digit', '').replace('Numpad', '') : '';
+
         handler =
-          currentShortcuts['ctrl+k'] ||
-          currentShortcuts['Control+k'] ||
-          currentShortcuts['ctrl+K'];
+          currentShortcuts[`alt+${e.key}`] ||
+          currentShortcuts[`Alt+${e.key}`] ||
+          currentShortcuts[`alt+${keyLower}`] ||
+          currentShortcuts[`Alt+${keyLower}`] ||
+          currentShortcuts[`alt+${e.code}`] ||
+          currentShortcuts[`Alt+${e.code}`] ||
+          currentShortcuts[`alt+${codeLower}`] ||
+          currentShortcuts[`Alt+${codeLower}`] ||
+          currentShortcuts[`alt+${digitMatch}`] ||
+          currentShortcuts[`Alt+${digitMatch}`];
+      }
+
+      // Support combination shortcuts like 'ctrl+k' or 'Control+k'
+      if (!handler && e.ctrlKey) {
+        const keyLower = e.key ? e.key.toLowerCase() : '';
+        handler =
+          currentShortcuts[`ctrl+${keyLower}`] ||
+          currentShortcuts[`Control+${keyLower}`] ||
+          currentShortcuts[`ctrl+${e.key}`] ||
+          currentShortcuts[`Control+${e.key}`];
       }
 
       if (!handler) {

@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Product, SupplierReturn, SupplierCreditNote, AccountPayable, Employee } from '../types';
+import { Product, SupplierReturn, SupplierCreditNote, AccountPayable, Employee, PurchaseOrder, PurchaseReceipt, PayablePayment, Movement } from '../types';
 import { SupplierPicker } from './SupplierPicker';
+import { SupplierDetailModal } from './SupplierDetailModal';
 import { firestoreService } from '../lib/firebase';
 import { increment } from 'firebase/firestore';
 import { useAlert } from '../context/AlertContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { getStringValue } from '../lib/normalize';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { isFuzzyMatch } from '../lib/textSearch';
 import { 
   Package, 
   Plus, 
@@ -32,6 +35,10 @@ interface ReturnsViewProps {
   supplierCreditNotes?: SupplierCreditNote[];
   payables?: AccountPayable[];
   currentEmployee: Employee | null;
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
+  payablePayments?: PayablePayment[];
+  movements?: Movement[];
 }
 
 export const ReturnsView: React.FC<ReturnsViewProps> = ({
@@ -40,9 +47,14 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
   supplierCreditNotes = [],
   payables = [],
   currentEmployee,
+  purchaseOrders = [],
+  purchaseReceipts = [],
+  payablePayments = [],
+  movements = [],
 }) => {
   const permissions = usePermissions(currentEmployee);
   const realAlert = useAlert();
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<string | null>(null);
 
   // Tab View inside ReturnsView
   const [activeSubTab, setActiveSubTab] = useState<'returns' | 'credit_notes'>('returns');
@@ -71,18 +83,19 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
   const [manualReason, setManualReason] = useState('');
   const [isSavingManualNote, setIsSavingManualNote] = useState(false);
 
+  const debouncedProductSearch = useDebouncedValue(productSearch, 200);
+
   // Filtered Products for selection in return form
   const filteredProducts = useMemo(() => {
-    if (!productSearch.trim()) return [];
-    const q = productSearch.toLowerCase();
+    if (!debouncedProductSearch.trim()) return [];
     return products.filter(
       p => 
-        p.name.toLowerCase().includes(q) || 
-        (p.code && p.code.toLowerCase().includes(q)) || 
-        (p.sku && p.sku.toLowerCase().includes(q)) ||
-        (p.barcode && p.barcode.toLowerCase().includes(q))
+        isFuzzyMatch(debouncedProductSearch, p.name) || 
+        (p.code && isFuzzyMatch(debouncedProductSearch, p.code)) || 
+        (p.sku && isFuzzyMatch(debouncedProductSearch, p.sku)) ||
+        (p.barcode && isFuzzyMatch(debouncedProductSearch, p.barcode))
     ).slice(0, 8);
-  }, [productSearch, products]);
+  }, [debouncedProductSearch, products]);
 
   // Handle product selection
   const handleSelectProduct = (product: Product) => {
@@ -319,17 +332,19 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
     }
   };
 
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
+
   // Filter returns based on search query and status filter
   const filteredReturns = useMemo(() => {
     return supplierReturns.filter(ret => {
       const matchesStatus = filterStatus === 'all' || ret.status === filterStatus;
-      const matchesSearch = 
-        getStringValue(ret.supplierName).toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getStringValue(ret.productName).toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getStringValue(ret.reason).toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = !debouncedSearchQuery.trim() || 
+        isFuzzyMatch(debouncedSearchQuery, getStringValue(ret.supplierName)) ||
+        isFuzzyMatch(debouncedSearchQuery, getStringValue(ret.productName)) ||
+        isFuzzyMatch(debouncedSearchQuery, getStringValue(ret.reason));
       return matchesStatus && matchesSearch;
     }).sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
-  }, [supplierReturns, filterStatus, searchQuery]);
+  }, [supplierReturns, filterStatus, debouncedSearchQuery]);
 
   // Supplier Credit Notes stats & filter
   const activeCreditNotesTotal = useMemo(() => {
@@ -614,9 +629,13 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-black text-slate-800 uppercase">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSupplierForModal(getStringValue(ret.supplierName))}
+                          className="text-xs font-black text-indigo-600 hover:text-indigo-800 hover:underline uppercase text-left cursor-pointer"
+                        >
                           {getStringValue(ret.supplierName)}
-                        </span>
+                        </button>
                         <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                           ret.status === 'credited'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -734,9 +753,13 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="text-xs font-black text-slate-800 uppercase block">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSupplierForModal(getStringValue(note.supplierName))}
+                          className="text-xs font-black text-indigo-600 hover:text-indigo-800 hover:underline uppercase text-left block cursor-pointer"
+                        >
                           {getStringValue(note.supplierName)}
-                        </span>
+                        </button>
                         <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
                           {getStringValue(note.reason)}
                         </p>
@@ -800,7 +823,13 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
 
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">Proveedor</span>
-              <p className="text-xs font-black text-slate-800 uppercase">{getStringValue(returnToCredit.supplierName)}</p>
+              <button
+                type="button"
+                onClick={() => setSelectedSupplierForModal(getStringValue(returnToCredit.supplierName))}
+                className="text-xs font-black text-indigo-600 hover:text-indigo-800 hover:underline uppercase text-left cursor-pointer"
+              >
+                {getStringValue(returnToCredit.supplierName)}
+              </button>
               <div className="flex justify-between items-center text-xs pt-1.5 border-t border-slate-200/60 mt-1.5">
                 <span className="text-slate-600 font-medium">{returnToCredit.quantity}x {getStringValue(returnToCredit.productName)}</span>
                 <span className="font-black text-indigo-600 font-mono">
@@ -939,6 +968,18 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
           </div>
         </div>
       )}
+
+      <SupplierDetailModal
+        isOpen={!!selectedSupplierForModal}
+        onClose={() => setSelectedSupplierForModal(null)}
+        supplierName={selectedSupplierForModal}
+        purchaseOrders={purchaseOrders}
+        purchaseReceipts={purchaseReceipts}
+        accountsPayable={payables}
+        payablePayments={payablePayments}
+        movements={movements}
+        supplierReturns={supplierReturns}
+      />
 
     </div>
   );

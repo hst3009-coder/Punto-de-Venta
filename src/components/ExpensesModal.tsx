@@ -12,8 +12,9 @@ import {
   AlertCircle,
   Hash
 } from 'lucide-react';
-import { Movement, Employee, Closure } from '../types';
+import { Movement, Employee, Closure, PurchaseOrder, PurchaseReceipt, AccountPayable, PayablePayment, SupplierReturn } from '../types';
 import { SupplierPicker } from './SupplierPicker';
+import { SupplierDetailModal } from './SupplierDetailModal';
 import { firestoreService } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAlert } from '../context/AlertContext';
@@ -26,6 +27,11 @@ interface ExpensesModalProps {
   clerkName: string;
   forcePaymentMethod?: 'cash' | 'card' | 'transfer';
   closures?: Closure[];
+  purchaseOrders?: PurchaseOrder[];
+  purchaseReceipts?: PurchaseReceipt[];
+  accountsPayable?: AccountPayable[];
+  payablePayments?: PayablePayment[];
+  supplierReturns?: SupplierReturn[];
 }
 
 const CATEGORY_SUGGESTIONS = [
@@ -42,9 +48,15 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
   movements,
   currentEmployee,
   clerkName,
-  closures = []
+  closures = [],
+  purchaseOrders = [],
+  purchaseReceipts = [],
+  accountsPayable = [],
+  payablePayments = [],
+  supplierReturns = [],
 }) => {
   const { showAlert } = useAlert();
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<string | null>(null);
   const [amount, setAmount] = useState<string>('');
   const [concept, setConcept] = useState<string>('');
   const [supplierName, setSupplierName] = useState<string>('');
@@ -444,7 +456,16 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                           </div>
                           <p className="text-sm font-extrabold text-slate-800 truncate uppercase" title={expense.concept}>
                             {expense.supplierName ? (
-                              <span>Pago a {expense.supplierName}</span>
+                              <span>
+                                Pago a{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedSupplierForModal(expense.supplierName || null)}
+                                  className="text-indigo-600 hover:text-indigo-800 hover:underline font-extrabold cursor-pointer text-left"
+                                >
+                                  {expense.supplierName}
+                                </button>
+                              </span>
                             ) : (
                               expense.concept
                             )}
@@ -479,6 +500,18 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
 
         </motion.div>
       </div>
+
+      <SupplierDetailModal
+        isOpen={!!selectedSupplierForModal}
+        onClose={() => setSelectedSupplierForModal(null)}
+        supplierName={selectedSupplierForModal}
+        purchaseOrders={purchaseOrders}
+        purchaseReceipts={purchaseReceipts}
+        accountsPayable={accountsPayable}
+        payablePayments={payablePayments}
+        movements={movements}
+        supplierReturns={supplierReturns}
+      />
     </AnimatePresence>
   );
 };
