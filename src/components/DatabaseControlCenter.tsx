@@ -723,15 +723,15 @@ export const DatabaseControlCenter: React.FC<DatabaseControlCenterProps> = ({
         {isFormOpen && selectedCol && (
           <div 
             onClick={(e) => { if (e.target === e.currentTarget) setIsFormOpen(false); }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4 animate-fade-in"
           >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden flex flex-col"
+              className="bg-white rounded-none sm:rounded-2xl w-full max-w-md h-full sm:h-auto max-h-[100dvh] sm:max-h-[90vh] shadow-2xl border-0 sm:border border-slate-200 overflow-hidden flex flex-col"
             >
-              <div className="p-5 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center">
+              <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center shrink-0">
                 <div>
                   <h4 className="font-extrabold text-slate-800 text-sm">
                     {editingDoc ? 'Editar Registro' : 'Agregar Registro'}
@@ -746,63 +746,65 @@ export const DatabaseControlCenter: React.FC<DatabaseControlCenterProps> = ({
                 </button>
               </div>
 
-              <form onSubmit={handleFormSubmit} className="p-5 space-y-4 max-h-[480px] overflow-y-auto">
-                {selectedCol.fields.map((f) => (
-                  <div key={f.name}>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">
-                      {f.label} {f.required && <span className="text-red-500">*</span>}
-                    </label>
+              <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto flex flex-col justify-between">
+                <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto">
+                  {selectedCol.fields.map((f) => (
+                    <div key={f.name}>
+                      <label className="text-xs font-bold text-slate-500 block mb-1">
+                        {f.label} {f.required && <span className="text-red-500">*</span>}
+                      </label>
 
-                    {f.type === 'select' ? (
-                      <select
-                        required={f.required}
-                        value={formData[f.name] !== undefined ? formData[f.name] : ''}
-                        onChange={(e) => handleInputChange(f.name, e.target.value, f.type)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-250 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                      >
-                        <option value="">-- Seleccionar --</option>
-                        {f.options?.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                    ) : f.type === 'boolean' ? (
-                      <div className="flex items-center gap-3 mt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleInputChange(f.name, !formData[f.name], 'boolean')}
-                          className="text-slate-600 hover:text-indigo-600 flex items-center gap-1.5"
+                      {f.type === 'select' ? (
+                        <select
+                          required={f.required}
+                          value={formData[f.name] !== undefined ? formData[f.name] : ''}
+                          onChange={(e) => handleInputChange(f.name, e.target.value, f.type)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-250 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
                         >
-                          {formData[f.name] ? (
-                            <ToggleRight className="w-9 h-6 text-indigo-600" />
-                          ) : (
-                            <ToggleLeft className="w-9 h-6 text-slate-350" />
-                          )}
-                          <span className="text-xs font-semibold">
-                            {formData[f.name] ? 'Activo / Sí' : 'Inactivo / No'}
-                          </span>
-                        </button>
-                      </div>
-                    ) : (
-                      <input autoComplete="off"
-                        type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
-                        step={f.type === 'number' ? 'any' : undefined}
-                        required={f.required}
-                        placeholder={f.label}
-                        value={formData[f.name] !== undefined ? formData[f.name] : ''}
-                        onChange={(e) => handleInputChange(f.name, e.target.value, f.type)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-250 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    )}
+                          <option value="">-- Seleccionar --</option>
+                          {f.options?.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : f.type === 'boolean' ? (
+                        <div className="flex items-center gap-3 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleInputChange(f.name, !formData[f.name], 'boolean')}
+                            className="text-slate-600 hover:text-indigo-600 flex items-center gap-1.5"
+                          >
+                            {formData[f.name] ? (
+                              <ToggleRight className="w-9 h-6 text-indigo-600" />
+                            ) : (
+                              <ToggleLeft className="w-9 h-6 text-slate-350" />
+                            )}
+                            <span className="text-xs font-semibold">
+                              {formData[f.name] ? 'Activo / Sí' : 'Inactivo / No'}
+                            </span>
+                          </button>
+                        </div>
+                      ) : (
+                        <input autoComplete="off"
+                          type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                          step={f.type === 'number' ? 'any' : undefined}
+                          required={f.required}
+                          placeholder={f.label}
+                          value={formData[f.name] !== undefined ? formData[f.name] : ''}
+                          onChange={(e) => handleInputChange(f.name, e.target.value, f.type)}
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-250 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      )}
 
-                    {selectedCol.key === 'products' && f.name === 'stock' && (
-                      <p className="mt-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg leading-relaxed">
-                        ⚠️ Editar el stock aquí no protege contra ventas simultáneas en otras terminales — para ajustes de inventario, usa mejor 'Agregar Stock' o 'Inventariar' en Gestión de Productos, que sí están protegidos contra pérdida de datos por uso concurrente.
-                      </p>
-                    )}
-                  </div>
-                ))}
+                      {selectedCol.key === 'products' && f.name === 'stock' && (
+                        <p className="mt-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg leading-relaxed">
+                          ⚠️ Editar el stock aquí no protege contra ventas simultáneas en otras terminales — para ajustes de inventario, usa mejor 'Agregar Stock' o 'Inventariar' en Gestión de Productos, que sí están protegidos contra pérdida de datos por uso concurrente.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
 
-                <div className="pt-3 border-t border-slate-100 flex justify-end gap-2 shrink-0">
+                <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50 flex justify-end gap-2 shrink-0 sticky bottom-0">
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
@@ -812,7 +814,7 @@ export const DatabaseControlCenter: React.FC<DatabaseControlCenterProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     {loading ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />

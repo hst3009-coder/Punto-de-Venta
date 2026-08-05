@@ -501,7 +501,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
       {/* Drawer Container */}
       <div className="relative w-full max-w-lg bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col justify-between z-10 animate-slide-left">
         {/* Header */}
-        <div className="p-5 border-b border-slate-200 bg-slate-50/90 flex flex-col gap-3">
+        <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/90 flex flex-col gap-3 shrink-0">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-xl font-bold text-slate-800">Panel de Configuración</h3>
@@ -539,7 +539,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
 
         {/* Navigation Tabs (Hidden during search) */}
         {!isSearching && (
-          <div className="px-5 py-2.5 border-b border-slate-200 flex gap-2 text-xs font-bold bg-white overflow-x-auto no-scrollbar">
+          <div className="px-4 sm:px-5 py-2.5 border-b border-slate-200 flex gap-2 text-xs font-bold bg-white overflow-x-auto no-scrollbar shrink-0">
             {permissions.editStoreSettings && (
               <button
                 onClick={() => setActiveTab('identity')}
@@ -606,7 +606,7 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
         )}
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-6">
           {visibleSections.length === 0 ? (
             <div className="py-12 text-center space-y-3">
               <Search className="w-8 h-8 text-slate-300 mx-auto" />
@@ -636,9 +636,16 @@ export const AdminDrawer: React.FC<AdminDrawerProps> = ({
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-xs text-slate-500 font-medium">
-          <span>* Los cambios de configuración se aplican inmediatamente.</span>
+        {/* Footer info & sticky action button */}
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500 font-medium shrink-0 sticky bottom-0">
+          <span className="text-[11px] font-medium text-slate-500">* Los cambios se aplican inmediatamente.</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0 shadow-xs"
+          >
+            Cerrar
+          </button>
         </div>
       </div>
     </div>

@@ -248,11 +248,11 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-none sm:rounded-3xl shadow-2xl w-full max-w-4xl h-full sm:h-auto max-h-[100dvh] sm:max-h-[90vh] flex flex-col overflow-hidden border-0 sm:border border-slate-100 animate-scale-up">
         
         {/* Modal Header */}
-        <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3.5">
             <div className="p-3 bg-indigo-500/20 border border-indigo-400/30 rounded-2xl text-indigo-400">
               <Building2 className="w-6 h-6" />
@@ -271,10 +271,10 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
         </div>
 
         {/* Top Summary Cards */}
-        <div className="p-6 bg-slate-50/70 border-b border-slate-200 shrink-0 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-4 sm:p-6 bg-slate-50/70 border-b border-slate-200 shrink-0 grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 overflow-y-auto sm:overflow-visible max-h-[30vh] sm:max-h-none">
           
           {/* Card 1: Total Comprado */}
-          <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
+          <div className="bg-white p-4 sm:p-4.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl shrink-0">
               <ShoppingBag className="w-6 h-6" />
             </div>
@@ -292,7 +292,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
           </div>
 
           {/* Card 2: Deuda Actual */}
-          <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
+          <div className="bg-white p-4 sm:p-4.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
             <div className={`p-3 rounded-xl shrink-0 ${totalDebt > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
               <Receipt className="w-6 h-6" />
             </div>
@@ -310,7 +310,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
           </div>
 
           {/* Card 3: Devoluciones */}
-          <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
+          <div className="bg-white p-4 sm:p-4.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl shrink-0">
               <RotateCcw className="w-6 h-6" />
             </div>
@@ -330,10 +330,10 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="px-6 bg-white border-b border-slate-200 shrink-0 flex items-center gap-2 pt-3">
+        <div className="px-4 sm:px-6 bg-white border-b border-slate-200 shrink-0 flex items-center gap-2 pt-3 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('orders')}
-            className={`pb-3 px-3.5 text-xs font-extrabold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+            className={`pb-3 px-3.5 text-xs font-extrabold transition-all border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'orders'
                 ? 'border-indigo-600 text-indigo-600 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -344,7 +344,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('payments')}
-            className={`pb-3 px-3.5 text-xs font-extrabold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+            className={`pb-3 px-3.5 text-xs font-extrabold transition-all border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'payments'
                 ? 'border-indigo-600 text-indigo-600 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -355,7 +355,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('returns')}
-            className={`pb-3 px-3.5 text-xs font-extrabold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+            className={`pb-3 px-3.5 text-xs font-extrabold transition-all border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'returns'
                 ? 'border-indigo-600 text-indigo-600 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -367,7 +367,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           
           {/* TAB 1: Órdenes de Compra */}
           {activeTab === 'orders' && (
@@ -519,10 +519,10 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-end">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-end sticky bottom-0">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-xs"
           >
             Cerrar
           </button>
