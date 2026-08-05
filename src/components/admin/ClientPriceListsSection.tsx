@@ -45,6 +45,7 @@ export const ClientPriceListsSection: React.FC<ClientPriceListsSectionProps> = (
           <div className="relative w-28">
             <input autoComplete="off"
               type="number"
+              inputMode="decimal"
               step="0.5"
               min="0"
               placeholder="% Ganancia"

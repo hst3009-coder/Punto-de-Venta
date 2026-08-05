@@ -782,6 +782,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               filterType={filterType}
               onNavigateToProduct={onNavigateToProduct}
               onNavigateToCustomer={onNavigateToCustomer}
+              onNavigateToTab={(tab) => setActiveTab(tab as any)}
             />
           )}
 

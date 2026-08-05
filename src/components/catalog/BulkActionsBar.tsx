@@ -113,6 +113,7 @@ export const BulkActionsBar: React.FC<BulkActionsBarProps> = ({
                   )}
                   <input autoComplete="off"
                     type="number"
+                    inputMode="decimal"
                     placeholder={batchPriceMode === 'fixed' ? 'Nuevo precio RD$' : '% ejemplo: 10 o -5'}
                     value={batchPriceValue}
                     onChange={(e) => setBatchPriceValue(e.target.value)}

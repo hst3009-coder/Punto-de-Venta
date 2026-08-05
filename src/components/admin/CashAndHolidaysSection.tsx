@@ -27,6 +27,7 @@ export const CashAndHolidaysSection: React.FC<CashAndHolidaysSectionProps> = ({
         <div className="relative">
           <input autoComplete="off"
             type="number"
+            inputMode="decimal"
             step="1"
             min="0"
             value={dashboardConfig?.defaultInitialCash ?? 500}

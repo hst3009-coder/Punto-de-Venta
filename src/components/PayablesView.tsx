@@ -661,6 +661,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                     <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Monto Total (RD$)</label>
                     <input autoComplete="off"
                       type="number"
+                      inputMode="decimal"
                       step="0.01"
                       min="0.01"
                       required
@@ -785,6 +786,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                         <DollarSign className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input autoComplete="off"
                           type="number"
+                          inputMode="decimal"
                           step="0.01"
                           max={selectedPayableBalance}
                           min="0.01"

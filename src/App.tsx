@@ -201,7 +201,7 @@ export default function App() {
   const [isCartTotalOverrideOpen, setIsCartTotalOverrideOpen] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [cartTotalAdjustmentActive, setCartTotalAdjustmentActive] = useState<boolean>(false);
-  const lastTotalNetoTapRef = useRef<number>(0);
+  const totalNetoLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Toast state for non-blocking notifications ---
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -2059,17 +2059,37 @@ export default function App() {
                   setIsCartTotalOverrideOpen(true);
                 }
               }}
-              onTouchEnd={() => {
-                const now = Date.now();
-                if (now - lastTotalNetoTapRef.current < 300) {
+              onTouchStart={() => {
+                if (totalNetoLongPressTimerRef.current) {
+                  clearTimeout(totalNetoLongPressTimerRef.current);
+                }
+                totalNetoLongPressTimerRef.current = setTimeout(() => {
                   if (cart.length > 0) {
                     setIsCartTotalOverrideOpen(true);
                   }
+                  totalNetoLongPressTimerRef.current = null;
+                }, 500);
+              }}
+              onTouchEnd={() => {
+                if (totalNetoLongPressTimerRef.current) {
+                  clearTimeout(totalNetoLongPressTimerRef.current);
+                  totalNetoLongPressTimerRef.current = null;
                 }
-                lastTotalNetoTapRef.current = now;
+              }}
+              onTouchMove={() => {
+                if (totalNetoLongPressTimerRef.current) {
+                  clearTimeout(totalNetoLongPressTimerRef.current);
+                  totalNetoLongPressTimerRef.current = null;
+                }
+              }}
+              onTouchCancel={() => {
+                if (totalNetoLongPressTimerRef.current) {
+                  clearTimeout(totalNetoLongPressTimerRef.current);
+                  totalNetoLongPressTimerRef.current = null;
+                }
               }}
               className="flex justify-between text-lg font-bold text-slate-900 pt-3 border-t border-slate-200 cursor-pointer select-none hover:bg-slate-100/80 p-1.5 rounded-lg transition-colors"
-              title="Doble clic o doble toque para ajustar el total de la venta"
+              title="Mantén presionado o doble clic para ajustar el total de la venta"
             >
               <span>Total Neto:</span>
               <span>${totals.total.toFixed(2)}</span>
@@ -2168,7 +2188,7 @@ export default function App() {
       </aside>
 
       {/* --- Fixed Live Clock (Bottom Right) --- */}
-      <div className="fixed bottom-3 right-4 z-30 pointer-events-none select-none">
+      <div className="fixed bottom-3 right-4 z-50 pointer-events-none select-none">
         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-white/90 backdrop-blur-md text-slate-700 border border-slate-200/90 shadow-md shadow-slate-900/5">
           <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
           <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
@@ -2511,6 +2531,7 @@ export default function App() {
                 <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Precio (ITBIS Incluido)</label>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="decimal"
                   step="any"
                   required
                   placeholder="0.00"

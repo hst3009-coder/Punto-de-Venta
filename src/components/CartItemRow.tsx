@@ -37,16 +37,24 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
   const unitsDeducted = selectedPackaging ? selectedPackaging.unitsPerPackage * quantity : quantity;
   const displayName = selectedPackaging ? `${product.name} — ${selectedPackaging.name}` : product.name;
 
-  const lastTouchRef = React.useRef<number>(0);
+  const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSubtotalTouchStart = (e: React.TouchEvent) => {
-    const now = Date.now();
-    if (now - lastTouchRef.current < 350) {
-      e.stopPropagation();
-      onOverridePrice?.(item);
+  const handleSubtotalTouchStart = React.useCallback((e: React.TouchEvent) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
     }
-    lastTouchRef.current = now;
-  };
+    longPressTimerRef.current = setTimeout(() => {
+      onOverridePrice?.(item);
+      longPressTimerRef.current = null;
+    }, 500);
+  }, [onOverridePrice, item]);
+
+  const handleSubtotalTouchCancel = React.useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
 
   const handleSubtotalDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -160,7 +168,10 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
             className="select-none cursor-pointer px-1 py-0.5 rounded-md hover:bg-purple-100/70 border border-transparent hover:border-purple-200 transition-all text-right group/subtotal"
             onDoubleClick={handleSubtotalDoubleClick}
             onTouchStart={handleSubtotalTouchStart}
-            title="Doble clic o doble toque para ajustar el precio unitario"
+            onTouchEnd={handleSubtotalTouchCancel}
+            onTouchMove={handleSubtotalTouchCancel}
+            onTouchCancel={handleSubtotalTouchCancel}
+            title="Mantén presionado o doble clic para ajustar el precio unitario"
           >
             <span className="text-sm font-bold text-slate-900 block group-hover/subtotal:text-purple-700">
               ${subtotal.toFixed(2)}

@@ -708,6 +708,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
                               <input autoComplete="off"
                                 type="number"
+                                inputMode="decimal"
                                 step="0.01"
                                 min="0"
                                 max={row.method === 'credit_note' ? creditNoteValidations[row.id]?.remainingBalance : undefined}

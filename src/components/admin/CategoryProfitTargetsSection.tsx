@@ -76,6 +76,7 @@ export const CategoryProfitTargetsSection: React.FC<CategoryProfitTargetsSection
                 <div className="flex items-center gap-1.5 shrink-0">
                   <input autoComplete="off"
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     max="1000"
                     step="0.5"

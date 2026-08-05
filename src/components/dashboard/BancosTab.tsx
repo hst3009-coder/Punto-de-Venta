@@ -580,6 +580,7 @@ export const BancosTab: React.FC<BancosTabProps> = ({
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">RD$</span>
                   <input autoComplete="off"
                     type="number"
+                    inputMode="decimal"
                     step="0.01"
                     min="0"
                     value={confirmedAmountInput}

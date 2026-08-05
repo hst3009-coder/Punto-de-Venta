@@ -512,6 +512,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 </label>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min="0"
                   value={cost}
@@ -526,6 +527,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 </label>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="decimal"
                   step="0.1"
                   value={profitPercent}
                   onChange={(e) => handleProfitChange(e.target.value)}
@@ -539,6 +541,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 </label>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min="0"
                   value={price}
@@ -556,6 +559,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 <input autoComplete="off"
                   ref={addQuantityInputRef}
                   type="number"
+                  inputMode="numeric"
                   required
                   min="1"
                   value={addQuantity}
@@ -687,6 +691,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                                 </label>
                                 <input autoComplete="off"
                                   type="number"
+                                  inputMode="decimal"
                                   step="0.01"
                                   min="0"
                                   value={currentInputValue}

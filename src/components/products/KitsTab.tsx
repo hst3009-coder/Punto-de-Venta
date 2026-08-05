@@ -403,6 +403,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
                           <span className="text-[10px] font-black uppercase text-slate-400">Cant:</span>
                           <input autoComplete="off"
                             type="number"
+                            inputMode="numeric"
                             min="1"
                             value={comp.quantity ?? ''}
                             onChange={(e) => handleQtyChange(comp.productId, e.target.value)}
@@ -456,6 +457,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">$</span>
                       <input autoComplete="off"
                         type="number"
+                        inputMode="decimal"
                         step="0.01"
                         required
                         value={price}

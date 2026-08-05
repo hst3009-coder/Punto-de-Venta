@@ -30,6 +30,7 @@ export const CardCommissionsDepositsSection: React.FC<CardCommissionsDepositsSec
         <div className="relative">
           <input autoComplete="off"
             type="number"
+            inputMode="decimal"
             step="0.1"
             min="0"
             max="100"

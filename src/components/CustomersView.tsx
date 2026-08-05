@@ -463,6 +463,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 font-mono">Límite Crédito</label>
                     <input autoComplete="off"
                       type="number"
+                      inputMode="decimal"
                       value={newCreditLimit}
                       disabled={newNoCreditLimit}
                       onChange={(e) => setNewCreditLimit(e.target.value)}
@@ -501,6 +502,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Deuda anterior (de otro sistema)</label>
                   <input autoComplete="off"
                     type="number"
+                    inputMode="decimal"
                     step="any"
                     value={newOpeningDebt}
                     onChange={(e) => setNewOpeningDebt(e.target.value)}
@@ -665,6 +667,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">RD$</span>
                           <input autoComplete="off"
                             type="number"
+                            inputMode="decimal"
                             step="any"
                             required
                             value={paymentAmountStr}
@@ -1047,6 +1050,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Límite Crédito</label>
                   <input autoComplete="off"
                     type="number"
+                    inputMode="decimal"
                     value={editCreditLimit}
                     disabled={editNoCreditLimit}
                     onChange={(e) => setEditCreditLimit(e.target.value)}

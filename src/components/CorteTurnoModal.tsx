@@ -700,6 +700,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                 </label>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="decimal"
                   value={initialCashStr}
                   onChange={(e) => setInitialCashStr(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-250 bg-slate-50/50 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
@@ -725,6 +726,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                 </div>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="decimal"
                   value={actualCashStr}
                   onChange={(e) => {
                     if (!isTouched) {
@@ -859,6 +861,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                   </label>
                   <input autoComplete="off"
                     type="number"
+                    inputMode="decimal"
                     step="0.01"
                     value={cardTerminalReportedAmountStr}
                     onChange={(e) => setCardTerminalReportedAmountStr(e.target.value)}

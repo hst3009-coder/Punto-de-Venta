@@ -114,6 +114,7 @@ export const PriceOverrideModal: React.FC<PriceOverrideModalProps> = ({
             <input autoComplete="off"
               ref={inputRef}
               type="number"
+              inputMode="decimal"
               step="0.01"
               min="0"
               required

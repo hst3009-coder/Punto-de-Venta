@@ -752,6 +752,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                     <DollarSign className="w-5 h-5 absolute left-3.5 top-3 text-slate-400" />
                     <input autoComplete="off"
                       type="number"
+                      inputMode="decimal"
                       step="0.01"
                       min="0.01"
                       required

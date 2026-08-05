@@ -364,6 +364,7 @@ export const InventoryTab: React.FC<InventoryTabProps> = ({ products, onBatchSuc
                 </label>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="numeric"
                   required
                   min="0"
                   value={newCount}

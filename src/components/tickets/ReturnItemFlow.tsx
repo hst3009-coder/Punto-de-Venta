@@ -71,6 +71,7 @@ export const ReturnItemFlow: React.FC<ReturnItemFlowProps> = ({
                 <label className="text-[10px] font-black text-slate-500 uppercase">Cantidad a Devolver</label>
                 <input autoComplete="off"
                   type="number"
+                  inputMode="numeric"
                   min="1"
                   max={
                     returningItem.quantity -

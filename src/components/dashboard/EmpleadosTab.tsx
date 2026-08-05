@@ -127,6 +127,7 @@ const PendingClosureRow: React.FC<PendingClosureRowProps> = React.memo(({
               <label className="text-[10px] font-bold text-slate-500 block mb-1">Efectivo Real Contado ($)</label>
               <input autoComplete="off"
                 type="number"
+                inputMode="decimal"
                 value={actualCashInput}
                 onChange={(e) => setActualCashInput(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-slate-250 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"

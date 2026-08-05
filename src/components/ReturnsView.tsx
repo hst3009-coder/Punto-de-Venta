@@ -502,6 +502,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                     </label>
                     <input autoComplete="off"
                       type="number"
+                      inputMode="numeric"
                       min="1"
                       step="any"
                       required
@@ -519,6 +520,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                     </label>
                     <input autoComplete="off"
                       type="number"
+                      inputMode="decimal"
                       min="0"
                       step="any"
                       required
@@ -925,6 +927,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                   <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input autoComplete="off"
                     type="number"
+                    inputMode="decimal"
                     step="0.01"
                     min="0.01"
                     required

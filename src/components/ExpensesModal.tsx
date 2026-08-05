@@ -267,6 +267,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-bold">$</span>
                     <input autoComplete="off"
                       type="number"
+                      inputMode="decimal"
                       step="any"
                       required
                       placeholder="0.00"
