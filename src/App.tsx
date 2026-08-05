@@ -901,12 +901,12 @@ export default function App() {
         if (isInput) return;
         if (cart.length > 0) {
           e.preventDefault();
-          const currentIndex = cart.findIndex((item) => item.product.id === selectedCartItemId);
+          const currentIndex = cart.findIndex((item) => getCartItemKey(item.product.id, item.packagingId) === selectedCartItemId);
           if (currentIndex === -1) {
-            setSelectedCartItemId(cart[0].product.id);
+            setSelectedCartItemId(getCartItemKey(cart[0].product.id, cart[0].packagingId));
           } else {
             const nextIndex = (currentIndex + 1) % cart.length;
-            setSelectedCartItemId(cart[nextIndex].product.id);
+            setSelectedCartItemId(getCartItemKey(cart[nextIndex].product.id, cart[nextIndex].packagingId));
           }
         }
       },
@@ -921,12 +921,12 @@ export default function App() {
         if (isInput) return;
         if (cart.length > 0) {
           e.preventDefault();
-          const currentIndex = cart.findIndex((item) => item.product.id === selectedCartItemId);
+          const currentIndex = cart.findIndex((item) => getCartItemKey(item.product.id, item.packagingId) === selectedCartItemId);
           if (currentIndex === -1) {
-            setSelectedCartItemId(cart[cart.length - 1].product.id);
+            setSelectedCartItemId(getCartItemKey(cart[cart.length - 1].product.id, cart[cart.length - 1].packagingId));
           } else {
             const prevIndex = (currentIndex - 1 + cart.length) % cart.length;
-            setSelectedCartItemId(cart[prevIndex].product.id);
+            setSelectedCartItemId(getCartItemKey(cart[prevIndex].product.id, cart[prevIndex].packagingId));
           }
         }
       },
