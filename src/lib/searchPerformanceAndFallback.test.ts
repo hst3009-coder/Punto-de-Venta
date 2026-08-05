@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Product, Sale } from '../types';
-import { rankSearchResults, sortProductsEmptySearch } from './search';
+import { rankSearchResults, sortProductsEmptySearch, getPackagingBarcode, matchesProductSearch } from './search';
 import { calculateABCClassification } from './abcAnalysis';
 
 const createProduct = (id: string, name: string, category = 'General', code = ''): Product => ({
@@ -130,5 +130,32 @@ describe('Search Fallback Sorting when Query is Empty (Parte B)', () => {
     expect(abcMap.get('1')).toBe('A'); // 800 / 1000 = 80%
     expect(abcMap.get('2')).toBe('B'); // 950 / 1000 = 95%
     expect(abcMap.get('3')).toBe('C'); // 1000 / 1000 = 100%
+  });
+});
+
+describe('Packaging Barcode Support', () => {
+  const prod: Product = {
+    ...createProduct('prod1', 'Aceite Crisol', 'General', '8025337133780'),
+    barcode: '8025337133780',
+    packagings: [
+      { id: 'pkg1', name: 'Caja 12u', unitsPerPackage: 12, price: 1200 },
+      { id: 'pkg2', name: 'Fardo 24u', unitsPerPackage: 24, price: 2300, barcode: '7461234567890' },
+    ],
+  };
+
+  it('calculates derived barcode when custom barcode is not present', () => {
+    expect(getPackagingBarcode(prod, prod.packagings![0])).toBe('8025337133780-12');
+  });
+
+  it('returns custom barcode when custom barcode is present', () => {
+    expect(getPackagingBarcode(prod, prod.packagings![1])).toBe('7461234567890');
+  });
+
+  it('matches product by packaging custom barcode', () => {
+    expect(matchesProductSearch(prod, '7461234567890')).toBe(true);
+  });
+
+  it('matches product by packaging derived barcode', () => {
+    expect(matchesProductSearch(prod, '8025337133780-12')).toBe(true);
   });
 });

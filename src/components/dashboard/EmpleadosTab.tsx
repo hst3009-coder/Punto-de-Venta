@@ -125,7 +125,7 @@ const PendingClosureRow: React.FC<PendingClosureRowProps> = React.memo(({
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-500 block mb-1">Efectivo Real Contado ($)</label>
-              <input
+              <input autoComplete="off"
                 type="number"
                 value={actualCashInput}
                 onChange={(e) => setActualCashInput(e.target.value)}
@@ -350,7 +350,8 @@ export const EmpleadosTab: React.FC<EmpleadosTabProps> = ({
 
       {/* Existing Employee Stats Table */}
       <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-        <table className="w-full text-left">
+        {/* Desktop Table */}
+        <table className="w-full text-left hidden md:table">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Empleado</th>
@@ -372,6 +373,85 @@ export const EmpleadosTab: React.FC<EmpleadosTabProps> = ({
             ))}
           </tbody>
         </table>
+
+        {/* Mobile Cards */}
+        <div className="block md:hidden p-4 space-y-3">
+          {employeeStats.map((emp, idx) => {
+            const avg = emp.tickets > 0 ? emp.total / emp.tickets : 0;
+            const isExpanded = expandedEmployeeId === emp.id;
+            return (
+              <div
+                key={emp.id}
+                onClick={() => setExpandedEmployeeId(isExpanded ? null : emp.id)}
+                className={`p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 cursor-pointer ${
+                  isExpanded ? 'ring-2 ring-indigo-500/50 bg-indigo-50/20' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="relative shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center border border-slate-200">
+                        <User className="w-5 h-5 text-slate-400" />
+                      </div>
+                      {idx < 3 && (
+                        <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-sm border border-white ${
+                          idx === 0 ? 'bg-amber-400' : idx === 1 ? 'bg-slate-300' : 'bg-orange-600'
+                        }`}>
+                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-sm font-black text-slate-800 block">{emp.name}</span>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{emp.role}</span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
+                    {isExpanded ? 'Ocultar gráfico' : 'Ver gráfico'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 text-[10px] font-mono">
+                  <div>
+                    <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Tickets</span>
+                    <span className="font-black text-slate-700">{emp.tickets}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Total Venta</span>
+                    <span className="font-black text-indigo-600">RD$ {emp.total.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Promedio</span>
+                    <span className="font-black text-slate-600">RD$ {avg.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="pt-3 border-t border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tendencia (6 meses)</h4>
+                      <TrendingUp className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div className="h-36">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={getEmployeeTrend(emp.id)}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="label" fontSize={9} axisLine={false} tickLine={false} />
+                          <YAxis fontSize={9} axisLine={false} tickLine={false} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '10px' }}
+                            formatter={(v: number) => [`RD$ ${v.toLocaleString()}`, 'Ventas']}
+                          />
+                          <Bar dataKey="total" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

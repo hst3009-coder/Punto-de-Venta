@@ -34,7 +34,7 @@ export const ClientPriceListsSection: React.FC<ClientPriceListsSectionProps> = (
       {/* Formulario para agregar / editar lista de precios */}
       <div className="space-y-2">
         <div className="flex gap-2">
-          <input
+          <input autoComplete="off"
             type="text"
             placeholder="Nombre (ej. Mayorista, Distribuidor)"
             disabled={!permissions.editStoreSettings}
@@ -43,7 +43,7 @@ export const ClientPriceListsSection: React.FC<ClientPriceListsSectionProps> = (
             className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
           />
           <div className="relative w-28">
-            <input
+            <input autoComplete="off"
               type="number"
               step="0.5"
               min="0"

@@ -531,7 +531,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
 
             <div className="relative flex-1 sm:max-w-xs">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
+              <input autoComplete="off"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -646,7 +646,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Concepto / NCF / Factura</label>
-                  <input
+                  <input autoComplete="off"
                     type="text"
                     required
                     value={concept}
@@ -659,7 +659,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="space-y-1">
                     <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Monto Total (RD$)</label>
-                    <input
+                    <input autoComplete="off"
                       type="number"
                       step="0.01"
                       min="0.01"
@@ -673,7 +673,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
 
                   <div className="space-y-1">
                     <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Fecha Vencimiento</label>
-                    <input
+                    <input autoComplete="off"
                       type="date"
                       required
                       value={dueDate}
@@ -783,7 +783,7 @@ export const PayablesView: React.FC<PayablesViewProps> = ({
                       <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Monto a pagar</label>
                       <div className="relative">
                         <DollarSign className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
+                        <input autoComplete="off"
                           type="number"
                           step="0.01"
                           max={selectedPayableBalance}

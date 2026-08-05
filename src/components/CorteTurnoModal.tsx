@@ -498,9 +498,9 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
   return (
     <div 
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0"
     >
-      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] print:border-none print:shadow-none print:max-h-full animate-scale-up">
+      <div className="bg-white rounded-none md:rounded-3xl shadow-2xl max-w-lg w-full h-full md:h-auto max-h-[100dvh] md:max-h-[90vh] overflow-hidden border-0 md:border border-slate-200 flex flex-col print:border-none print:shadow-none print:max-h-full animate-scale-up">
         
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-150 flex justify-between items-center bg-slate-50/80 shrink-0 print:hidden">
@@ -698,7 +698,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                 <label className="text-[11px] font-bold text-slate-500 block mb-1">
                   Fondo Inicial ($)
                 </label>
-                <input
+                <input autoComplete="off"
                   type="number"
                   value={initialCashStr}
                   onChange={(e) => setInitialCashStr(e.target.value)}
@@ -723,7 +723,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                     </button>
                   )}
                 </div>
-                <input
+                <input autoComplete="off"
                   type="number"
                   value={actualCashStr}
                   onChange={(e) => {
@@ -857,7 +857,7 @@ export const CorteTurnoModal: React.FC<CorteTurnoModalProps> = ({
                   <label className="text-[11px] font-bold text-slate-700 block">
                     ¿Cuál fue el monto real que reportó la terminal? ($) <span className="text-rose-500">*</span>
                   </label>
-                  <input
+                  <input autoComplete="off"
                     type="number"
                     step="0.01"
                     value={cardTerminalReportedAmountStr}

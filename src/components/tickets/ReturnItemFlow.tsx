@@ -69,7 +69,7 @@ export const ReturnItemFlow: React.FC<ReturnItemFlowProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-500 uppercase">Cantidad a Devolver</label>
-                <input
+                <input autoComplete="off"
                   type="number"
                   min="1"
                   max={

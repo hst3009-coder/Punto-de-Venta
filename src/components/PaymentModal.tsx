@@ -486,9 +486,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   return (
     <div 
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in"
     >
-      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col md:flex-row overflow-hidden border border-slate-200 animate-scale-up">
+      <div className="bg-white rounded-none md:rounded-3xl shadow-2xl max-w-4xl w-full h-full md:h-auto max-h-[100dvh] md:max-h-[90vh] flex flex-col md:flex-row overflow-hidden border-0 md:border border-slate-200 animate-scale-up">
         
         {/* Left pane: Checkout details and payment triggers */}
         <div className="flex-1 p-6 md:p-8 flex flex-col justify-between overflow-y-auto">
@@ -706,7 +706,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                             {/* Amount field */}
                             <div className="relative flex-1">
                               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
-                              <input
+                              <input autoComplete="off"
                                 type="number"
                                 step="0.01"
                                 min="0"
@@ -747,7 +747,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           {row.method === 'credit_note' && (
                             <div className="pl-7 space-y-2 pt-1 border-t border-slate-100">
                               <div className="flex items-center gap-2">
-                                <input
+                                <input autoComplete="off"
                                   type="text"
                                   placeholder="CÓDIGO NOTA (ej. 8 CARACTERES)"
                                   value={creditNoteInputs[row.id] ?? row.creditNoteCode ?? ''}
@@ -859,7 +859,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         <label className="text-xs font-bold text-slate-500 block mb-1">Monto Recibido</label>
                         <div className="relative">
                           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                          <input
+                          <input autoComplete="off"
                             ref={cashInputRef}
                             type="text"
                             value={amountPaidStr}

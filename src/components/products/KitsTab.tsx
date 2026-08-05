@@ -309,7 +309,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
                   Nombre del Combo / Kit *
                 </label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   required
                   placeholder="Ej. Combo Desayuno Completo"
@@ -323,7 +323,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
                   Código de Combo (Escanear o Interno)
                 </label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   placeholder="Ej. COMBO-DES"
                   value={code}
@@ -340,7 +340,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
               </label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
+                <input autoComplete="off"
                   type="text"
                   placeholder="Escribe nombre o escanea código del componente..."
                   value={componentSearchQuery}
@@ -401,7 +401,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
                         {/* Quantity input */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] font-black uppercase text-slate-400">Cant:</span>
-                          <input
+                          <input autoComplete="off"
                             type="number"
                             min="1"
                             value={comp.quantity ?? ''}
@@ -454,7 +454,7 @@ export const KitsTab: React.FC<KitsTabProps> = ({
                     </label>
                     <div className="relative max-w-xs">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">$</span>
-                      <input
+                      <input autoComplete="off"
                         type="number"
                         step="0.01"
                         required

@@ -43,7 +43,7 @@ import { buildSaleBatchOperations, calculateSaleTotals } from './lib/saleProcess
 import { getSaleTimestamp } from './lib/dates';
 import { getListPrice } from './lib/priceLists';
 import { getEffectiveItemInfo, getCartItemKey } from './lib/bulkPricing';
-import { matchesProductSearch, rankSearchResults } from './lib/search';
+import { matchesProductSearch, rankSearchResults, getPackagingBarcode } from './lib/search';
 import { calculateABCClassification } from './lib/abcAnalysis';
 import { LoginScreen } from './components/LoginScreen';
 import { PinLockScreen } from './components/PinLockScreen';
@@ -77,7 +77,9 @@ import {
   LayoutDashboard,
   TrendingDown,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export default function App() {
@@ -197,6 +199,7 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [priceOverrideModalItem, setPriceOverrideModalItem] = useState<CartItem | null>(null);
   const [isCartTotalOverrideOpen, setIsCartTotalOverrideOpen] = useState(false);
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [cartTotalAdjustmentActive, setCartTotalAdjustmentActive] = useState<boolean>(false);
   const lastTotalNetoTapRef = useRef<number>(0);
 
@@ -1104,14 +1107,34 @@ export default function App() {
     if (!cleanQuery) return;
 
     const cleanQueryCode = cleanQuery.replace(/^0+/, '');
+    let matchedPackaging: ProductPackaging | undefined = undefined;
+
     const matchedProduct = products.find((p) => {
+      if (p.packagings && p.packagings.length > 0) {
+        const foundPkg = p.packagings.find((pkg) => {
+          const pkgBarcode = getPackagingBarcode(p, pkg).trim().replace(/^0+/, '');
+          return pkgBarcode && pkgBarcode === cleanQueryCode;
+        });
+        if (foundPkg) {
+          matchedPackaging = foundPkg;
+          return true;
+        }
+      }
+
       const cleanBarcode = p.barcode ? p.barcode.trim().replace(/^0+/, '') : '';
       const cleanId = p.id ? p.id.trim().replace(/^0+/, '') : '';
-      return (cleanBarcode && cleanBarcode === cleanQueryCode) || (cleanId && cleanId === cleanQueryCode);
+      const cleanCode = p.code ? p.code.trim().replace(/^0+/, '') : '';
+      const cleanSku = p.sku ? p.sku.trim().replace(/^0+/, '') : '';
+      return (
+        (cleanBarcode && cleanBarcode === cleanQueryCode) ||
+        (cleanCode && cleanCode === cleanQueryCode) ||
+        (cleanId && cleanId === cleanQueryCode) ||
+        (cleanSku && cleanSku === cleanQueryCode)
+      );
     });
 
     if (matchedProduct) {
-      handleAddToCart(matchedProduct);
+      handleAddToCart(matchedProduct, matchedPackaging);
       setSearchQuery(''); // Reset search bar
     } else {
       const visibleCategoryProducts = products.filter((p) => {
@@ -1127,7 +1150,15 @@ export default function App() {
         abcAnalysis.hasHistory
       );
       if (ranked.length > 0) {
-        handleAddToCart(ranked[0]);
+        const topProduct = ranked[0];
+        let topPkg: ProductPackaging | undefined = undefined;
+        if (topProduct.packagings && topProduct.packagings.length > 0) {
+          topPkg = topProduct.packagings.find((pkg) => {
+            const pkgBarcode = getPackagingBarcode(topProduct, pkg).trim().replace(/^0+/, '');
+            return pkgBarcode && pkgBarcode === cleanQueryCode;
+          });
+        }
+        handleAddToCart(topProduct, topPkg);
         setSearchQuery(''); // Reset search bar
       } else {
         setSearchQuery('');
@@ -1331,10 +1362,10 @@ export default function App() {
     : null;
 
   return (
-    <div className="h-screen w-screen bg-slate-50 text-slate-800 flex font-sans antialiased overflow-hidden">
+    <div className="h-screen w-screen bg-slate-50 text-slate-800 flex flex-col md:flex-row font-sans antialiased overflow-hidden relative">
       
       {/* Left Column: Header, Products & Shortcuts */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-slate-50">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-slate-50 relative pb-16 md:pb-0">
         
         {/* Top Banner / Header */}
         <header className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm shrink-0">
@@ -1420,7 +1451,7 @@ export default function App() {
               <div className="relative">
                 {showClerkInput ? (
                   <form onSubmit={handleClerkNameSubmit} className="flex gap-1 animate-scale-up absolute right-0 top-1/2 -translate-y-1/2 bg-white p-2 border border-slate-200 rounded-xl shadow-lg z-50">
-                    <input
+                    <input autoComplete="off"
                       type="text"
                       value={tempClerkName}
                       onChange={(e) => setTempClerkName(e.target.value)}
@@ -1721,12 +1752,12 @@ export default function App() {
         </main>
 
         {/* Bottom Sticky Shortcut Legend bar as interactive buttons */}
-        <footer className="bg-white border-t border-slate-200 py-3 px-6 text-xs text-slate-500 flex flex-wrap justify-center items-center gap-3 shrink-0">
+        <footer className="bg-white border-t border-slate-200 py-3 px-4 text-xs text-slate-500 flex items-center justify-start sm:justify-center gap-2 overflow-x-auto whitespace-nowrap shrink-0 z-10">
           
           {permissions.manageProducts && (
             <button
               onClick={() => setIsProductsManagerOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl font-medium text-indigo-700 transition-colors cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl font-medium text-indigo-700 transition-colors cursor-pointer shadow-xs shrink-0"
               title="Catálogo de Productos y Suministro (F3)"
             >
               <kbd className="bg-white px-1.5 py-0.5 rounded-lg border border-indigo-300 font-mono text-[10px] font-black shadow-xs">F3</kbd>
@@ -1737,7 +1768,7 @@ export default function App() {
           {permissions.manageCustomers && (
             <button
               onClick={() => setIsCustomersOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl font-medium text-indigo-700 transition-colors cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl font-medium text-indigo-700 transition-colors cursor-pointer shadow-xs shrink-0"
               title="Cartera de Clientes y Créditos (F4)"
             >
               <kbd className="bg-white px-1.5 py-0.5 rounded-lg border border-indigo-300 font-mono text-[10px] font-black shadow-xs">F4</kbd>
@@ -1748,7 +1779,7 @@ export default function App() {
           {permissions.viewDashboard && (
             <button
               onClick={() => setShowDashboard(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl font-medium text-indigo-750 transition-colors cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl font-medium text-indigo-750 transition-colors cursor-pointer shadow-xs shrink-0"
               title="Ver Dashboard y Analíticas"
             >
               <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600" />
@@ -1758,7 +1789,7 @@ export default function App() {
 
           <button
             onClick={() => searchInputRef.current?.focus()}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-medium text-slate-700 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-medium text-slate-700 transition-colors cursor-pointer shrink-0"
             title="Enfocar buscador"
           >
             <kbd className="bg-white px-1.5 py-0.5 rounded-lg border border-slate-300 font-mono text-[10px] font-black shadow-xs">F10</kbd>
@@ -1770,7 +1801,7 @@ export default function App() {
               if (cart.length > 0) setIsPaymentOpen(true);
             }}
             disabled={cart.length === 0}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-xl font-medium transition-colors cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-xl font-medium transition-colors cursor-pointer shrink-0 ${
               cart.length > 0 
                 ? 'bg-indigo-50/50 hover:bg-indigo-50 border-indigo-200 text-indigo-700' 
                 : 'bg-slate-50 text-slate-400 border-slate-150 cursor-not-allowed'
@@ -1789,7 +1820,7 @@ export default function App() {
                 setExpensesForceCash(true);
                 setIsExpensesOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl font-medium text-rose-700 transition-colors cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl font-medium text-rose-700 transition-colors cursor-pointer shadow-xs shrink-0"
               title="Registrar Egresos de Caja"
             >
               <TrendingDown className="w-3.5 h-3.5 text-rose-600" />
@@ -1799,7 +1830,7 @@ export default function App() {
 
           <button
             onClick={() => setIsCorteOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50/50 hover:bg-rose-50 border border-rose-200 rounded-xl font-medium text-rose-700 transition-colors cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50/50 hover:bg-rose-50 border border-rose-200 rounded-xl font-medium text-rose-700 transition-colors cursor-pointer shadow-xs shrink-0"
             title="Realizar Corte de Turno de hoy (F6)"
           >
             <kbd className="bg-white px-1.5 py-0.5 rounded-lg border border-rose-300 font-mono text-[10px] font-black shadow-xs">F6</kbd>
@@ -1808,10 +1839,53 @@ export default function App() {
           </button>
         </footer>
 
+        {/* Floating Mobile Cart Bar (visible only on mobile when cart drawer is closed) */}
+        {!isMobileCartOpen && (
+          <div
+            onClick={() => setIsMobileCartOpen(true)}
+            className="md:hidden fixed bottom-3 left-3 right-3 z-30 bg-indigo-600 text-white rounded-2xl p-3 shadow-2xl flex items-center justify-between font-bold cursor-pointer active:scale-98 transition-all"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-indigo-700 rounded-xl relative">
+                <ShoppingCart className="w-5 h-5 text-white" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-amber-400 text-slate-950 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                    {cart.reduce((s, i) => s + i.quantity, 0)}
+                  </span>
+                )}
+              </div>
+              <div>
+                <div className="text-xs font-black uppercase tracking-wider text-indigo-100">
+                  {cart.length === 0 ? 'Ver carrito (Vacío)' : `Ver Carrito (${cart.reduce((s, i) => s + i.quantity, 0)} art.)`}
+                </div>
+                <div className="text-[10px] text-indigo-200 font-medium">Toca para abrir resumen</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-black font-mono bg-indigo-750/90 px-3 py-1.5 rounded-xl border border-indigo-500/40">
+                RD$ {totals.total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <ChevronUp className="w-5 h-5 text-indigo-200 animate-bounce" />
+            </div>
+          </div>
+        )}
+
       </div>
 
-      {/* Right Column: Order Summary (reaches from top to bottom, pegged to the right) */}
-      <aside className="w-[380px] shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden shadow-2xl relative z-10">
+      {/* Mobile Cart Overlay Backdrop */}
+      {isMobileCartOpen && (
+        <div
+          onClick={() => setIsMobileCartOpen(false)}
+          className="md:hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-30 animate-fade-in"
+        />
+      )}
+
+      {/* Right Column / Mobile Drawer: Order Summary */}
+      <aside
+        className={`fixed inset-x-0 bottom-0 top-12 z-40 bg-white border-t border-slate-200 flex flex-col overflow-hidden shadow-2xl transition-transform duration-300 md:relative md:top-0 md:inset-auto md:w-[380px] md:shrink-0 md:border-t-0 md:border-l md:translate-y-0 ${
+          isMobileCartOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'
+        }`}
+      >
         
         {/* Cart Header */}
         <div className="p-4 border-b border-slate-150 bg-slate-50/50 flex justify-between items-center shrink-0">
@@ -1825,31 +1899,43 @@ export default function App() {
             </div>
           </div>
           
-          {cart.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <button
-                id="hold-cart-btn"
-                type="button"
-                onClick={() => {
-                  setPendingRefName(`Venta #${todaysSalesCount + 1}`);
-                  setIsSavingPending(true);
-                }}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100/50 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
-                title="Poner esta orden en espera"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                Guardar
-              </button>
-              <button
-                id="clear-cart-btn"
-                onClick={handleClearCart}
-                className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1 bg-red-50 hover:bg-red-100/50 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Vaciar
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5">
+            {cart.length > 0 && (
+              <>
+                <button
+                  id="hold-cart-btn"
+                  type="button"
+                  onClick={() => {
+                    setPendingRefName(`Venta #${todaysSalesCount + 1}`);
+                    setIsSavingPending(true);
+                  }}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100/50 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                  title="Poner esta orden en espera"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Guardar
+                </button>
+                <button
+                  id="clear-cart-btn"
+                  onClick={handleClearCart}
+                  className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1 bg-red-50 hover:bg-red-100/50 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Vaciar
+                </button>
+              </>
+            )}
+
+            {/* Close button on mobile drawer */}
+            <button
+              type="button"
+              onClick={() => setIsMobileCartOpen(false)}
+              className="md:hidden p-1.5 text-slate-400 hover:text-slate-600 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors ml-1 cursor-pointer"
+              title="Cerrar resumen"
+            >
+              <ChevronDown className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Inline Save Reference form */}
@@ -1863,7 +1949,7 @@ export default function App() {
             }}
             className="p-3 bg-indigo-50/50 border-b border-indigo-100 flex items-center gap-2 shrink-0 animate-scale-up"
           >
-            <input
+            <input autoComplete="off"
               type="text"
               placeholder="Referencia (ej: Mesa 3, Juan...)"
               value={pendingRefName}
@@ -2410,7 +2496,7 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Nombre / Descripción</label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   required
                   placeholder="Ej. Reparación de pantalla, Artículo de limpieza..."
@@ -2422,7 +2508,7 @@ export default function App() {
 
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Precio (ITBIS Incluido)</label>
-                <input
+                <input autoComplete="off"
                   type="number"
                   step="any"
                   required

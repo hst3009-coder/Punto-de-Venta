@@ -184,7 +184,7 @@ export const MenudoModal: React.FC<MenudoModalProps> = ({
                         <div className="flex items-center gap-2 flex-1 justify-end">
                           <div className="flex items-center gap-1 max-w-[100px]">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Unid:</span>
-                            <input
+                            <input autoComplete="off"
                               type="number"
                               min="0"
                               placeholder="0"
@@ -195,7 +195,7 @@ export const MenudoModal: React.FC<MenudoModalProps> = ({
                           </div>
                           <div className="flex items-center gap-1 max-w-[125px]">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Paq (x50):</span>
-                            <input
+                            <input autoComplete="off"
                               type="number"
                               min="0"
                               placeholder="0"
@@ -234,7 +234,7 @@ export const MenudoModal: React.FC<MenudoModalProps> = ({
                         <div className="flex items-center gap-2 flex-1 justify-end">
                           <div className="flex items-center gap-1 max-w-[100px]">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Unid:</span>
-                            <input
+                            <input autoComplete="off"
                               type="number"
                               min="0"
                               placeholder="0"
@@ -245,7 +245,7 @@ export const MenudoModal: React.FC<MenudoModalProps> = ({
                           </div>
                           <div className="flex items-center gap-1 max-w-[125px]">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Paq (x40):</span>
-                            <input
+                            <input autoComplete="off"
                               type="number"
                               min="0"
                               placeholder="0"

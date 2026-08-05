@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Product, Category, DashboardConfig, ProductPackaging } from '../../types';
 import { getPreTaxAmount, roundCents } from '../../lib/money';
-import { matchesProductSearch } from '../../lib/search';
+import { matchesProductSearch, getPackagingBarcode } from '../../lib/search';
 import { firestoreService } from '../../lib/firebase';
 import { increment } from 'firebase/firestore';
 import { useAlert } from '../../context/AlertContext';
@@ -126,18 +126,30 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
 
     const cleanQueryCode = cleanQuery.replace(/^0+/, '');
 
-    // 1. Search exact code/barcode/SKU/id match
+    // 1. Search exact code/barcode/SKU/id match (including packaging barcodes)
     const exactMatch = candidateProducts.find((p) => {
       const cleanBarcode = p.barcode ? p.barcode.trim().replace(/^0+/, '') : '';
       const cleanCode = p.code ? p.code.trim().replace(/^0+/, '') : '';
       const cleanId = p.id ? p.id.trim().replace(/^0+/, '') : '';
       const cleanSku = p.sku ? p.sku.trim().replace(/^0+/, '') : '';
-      return (
+
+      if (
         (cleanBarcode && cleanBarcode === cleanQueryCode) ||
         (cleanCode && cleanCode === cleanQueryCode) ||
         (cleanId && cleanId === cleanQueryCode) ||
         (cleanSku && cleanSku === cleanQueryCode)
-      );
+      ) {
+        return true;
+      }
+
+      if (p.packagings && p.packagings.length > 0) {
+        return p.packagings.some((pkg) => {
+          const pkgBarcode = getPackagingBarcode(p, pkg).trim().replace(/^0+/, '');
+          return pkgBarcode && pkgBarcode === cleanQueryCode;
+        });
+      }
+
+      return false;
     });
 
     if (exactMatch) {
@@ -425,7 +437,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
               </label>
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
+                <input autoComplete="off"
                   ref={searchInputRef}
                   type="text"
                   placeholder="MAYÚSCULAS O ESCÁNER..."
@@ -498,7 +510,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
                   Costo de Compra ($)
                 </label>
-                <input
+                <input autoComplete="off"
                   type="number"
                   step="0.01"
                   min="0"
@@ -512,7 +524,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
                   Ganancia %
                 </label>
-                <input
+                <input autoComplete="off"
                   type="number"
                   step="0.1"
                   value={profitPercent}
@@ -525,7 +537,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
                   Precio de Venta ($)
                 </label>
-                <input
+                <input autoComplete="off"
                   type="number"
                   step="0.01"
                   min="0"
@@ -541,7 +553,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
                   Cantidad a Agregar *
                 </label>
-                <input
+                <input autoComplete="off"
                   ref={addQuantityInputRef}
                   type="number"
                   required
@@ -567,7 +579,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
                   Vencimiento (Opcional)
                 </label>
-                <input
+                <input autoComplete="off"
                   type="date"
                   value={expirationDate}
                   onChange={(e) => setExpirationDate(e.target.value)}
@@ -673,7 +685,7 @@ export const StockAddTab: React.FC<StockAddTabProps> = ({
                                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
                                   Precio Sugerido / Editado ($)
                                 </label>
-                                <input
+                                <input autoComplete="off"
                                   type="number"
                                   step="0.01"
                                   min="0"

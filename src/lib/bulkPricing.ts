@@ -80,54 +80,67 @@ export function getEffectiveItemInfo(
 ): EffectivePriceInfo {
   const originalCatalogPrice = product.price;
 
-  // 1. Packaging
-  const packagingPrice = selectedPackaging ? selectedPackaging.price : null;
+  // 1. Calculate real units considering packaging (effectiveUnitQuantity)
+  const effectiveUnitQuantity = selectedPackaging
+    ? quantity * selectedPackaging.unitsPerPackage
+    : quantity;
 
-  // 2. Bulk Pricing
+  // 2. Per-unit price calculations for fair comparisons
+  const packagingPricePerUnit = selectedPackaging
+    ? selectedPackaging.price / selectedPackaging.unitsPerPackage
+    : null;
+
   let matchingBulkTier: BulkTier | undefined = undefined;
   if (product.bulkPricing && Array.isArray(product.bulkPricing) && product.bulkPricing.length > 0) {
     const sortedTiers = [...product.bulkPricing]
       .filter((t) => typeof t.minQuantity === 'number' && typeof t.price === 'number')
       .sort((a, b) => b.minQuantity - a.minQuantity); // highest quantity first
-    
-    matchingBulkTier = sortedTiers.find((t) => quantity >= t.minQuantity);
+
+    matchingBulkTier = sortedTiers.find((t) => effectiveUnitQuantity >= t.minQuantity);
   }
-  const bulkPrice = matchingBulkTier ? matchingBulkTier.price : null;
+  const bulkPricePerUnit = matchingBulkTier ? matchingBulkTier.price : null;
 
-  // 3. Price List
-  const priceListPrice = activePriceList ? getListPrice(product, activePriceList) : null;
+  const priceListPricePerUnit = activePriceList ? getListPrice(product, activePriceList) : null;
 
-  // 4. Manual Price Override
   const overridePrice = typeof priceOverride === 'number' && priceOverride > 0 ? priceOverride : null;
+  const overridePricePerUnit = overridePrice !== null
+    ? (selectedPackaging ? overridePrice / selectedPackaging.unitsPerPackage : overridePrice)
+    : null;
+
+  const standardPricePerUnit = originalCatalogPrice;
 
   interface Option {
-    price: number;
+    perUnitPrice: number;
     type: 'standard' | 'price_list' | 'bulk_pricing' | 'packaging' | 'price_override';
   }
 
   const options: Option[] = [];
 
-  if (packagingPrice !== null) {
-    options.push({ price: packagingPrice, type: 'packaging' });
+  if (selectedPackaging) {
+    if (packagingPricePerUnit !== null) {
+      options.push({ perUnitPrice: packagingPricePerUnit, type: 'packaging' });
+    }
+  } else {
+    options.push({ perUnitPrice: standardPricePerUnit, type: 'standard' });
   }
-  if (bulkPrice !== null) {
-    options.push({ price: bulkPrice, type: 'bulk_pricing' });
-  }
-  if (priceListPrice !== null) {
-    options.push({ price: priceListPrice, type: 'price_list' });
-  }
-  if (overridePrice !== null) {
-    options.push({ price: overridePrice, type: 'price_override' });
-  }
-  options.push({ price: originalCatalogPrice, type: 'standard' });
 
-  // Pick lowest price. If tie with overridePrice, prefer price_override
+  if (bulkPricePerUnit !== null) {
+    options.push({ perUnitPrice: bulkPricePerUnit, type: 'bulk_pricing' });
+  }
+  if (priceListPricePerUnit !== null) {
+    options.push({ perUnitPrice: priceListPricePerUnit, type: 'price_list' });
+  }
+  if (overridePricePerUnit !== null) {
+    options.push({ perUnitPrice: overridePricePerUnit, type: 'price_override' });
+  }
+
+  // Pick lowest per-unit price. If tie with price_override, prefer price_override
   let best = options[0];
   for (let i = 1; i < options.length; i++) {
     const opt = options[i];
-    if (opt.price < best.price) {
+    if (opt.perUnitPrice < best.perUnitPrice) {
       best = opt;
-    } else if (opt.price === best.price && opt.type === 'price_override') {
+    } else if (opt.perUnitPrice === best.perUnitPrice && opt.type === 'price_override') {
       best = opt;
     }
   }
@@ -149,9 +162,13 @@ export function getEffectiveItemInfo(
     };
   }
 
-  if (best.type === 'bulk_pricing' && bulkPrice !== null) {
+  if (best.type === 'bulk_pricing' && bulkPricePerUnit !== null) {
+    const unitPriceToApply = selectedPackaging
+      ? bulkPricePerUnit * selectedPackaging.unitsPerPackage
+      : bulkPricePerUnit;
+
     return {
-      unitPrice: bulkPrice,
+      unitPrice: unitPriceToApply,
       appliedType: 'bulk_pricing',
       originalCatalogPrice,
       bulkTierApplied: matchingBulkTier,
@@ -160,9 +177,13 @@ export function getEffectiveItemInfo(
 
   const isPriceListFallback = Boolean(activePriceList && (product.cost || 0) <= 0);
 
-  if (best.type === 'price_list' && priceListPrice !== null) {
+  if (best.type === 'price_list' && priceListPricePerUnit !== null) {
+    const unitPriceToApply = selectedPackaging
+      ? priceListPricePerUnit * selectedPackaging.unitsPerPackage
+      : priceListPricePerUnit;
+
     return {
-      unitPrice: priceListPrice,
+      unitPrice: unitPriceToApply,
       appliedType: 'price_list',
       originalCatalogPrice,
       appliedPriceListName: activePriceList?.name,
@@ -170,8 +191,12 @@ export function getEffectiveItemInfo(
     };
   }
 
+  const standardUnitPriceToApply = selectedPackaging
+    ? standardPricePerUnit * selectedPackaging.unitsPerPackage
+    : standardPricePerUnit;
+
   return {
-    unitPrice: originalCatalogPrice,
+    unitPrice: standardUnitPriceToApply,
     appliedType: 'standard',
     originalCatalogPrice,
     priceListFallbackNoCost: isPriceListFallback,

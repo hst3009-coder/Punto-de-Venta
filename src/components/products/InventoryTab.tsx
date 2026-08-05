@@ -263,7 +263,7 @@ export const InventoryTab: React.FC<InventoryTabProps> = ({ products, onBatchSuc
           </label>
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
+            <input autoComplete="off"
               type="text"
               placeholder="MAYÚSCULAS O ESCÁNER..."
               value={searchQuery}
@@ -327,7 +327,7 @@ export const InventoryTab: React.FC<InventoryTabProps> = ({ products, onBatchSuc
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
                   Código de Barras
                 </label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   readOnly
                   value={selectedProduct.code || selectedProduct.barcode || selectedProduct.id}
@@ -339,7 +339,7 @@ export const InventoryTab: React.FC<InventoryTabProps> = ({ products, onBatchSuc
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
                   Precio de Venta ($)
                 </label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   readOnly
                   value={`$${selectedProduct.price.toFixed(2)}`}
@@ -362,7 +362,7 @@ export const InventoryTab: React.FC<InventoryTabProps> = ({ products, onBatchSuc
                 <label className="text-[10px] font-black uppercase text-slate-700 tracking-wider block mb-1">
                   Nuevo Conteo Físico *
                 </label>
-                <input
+                <input autoComplete="off"
                   type="number"
                   required
                   min="0"

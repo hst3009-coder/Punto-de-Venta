@@ -147,7 +147,7 @@ export const SuppliersSection: React.FC<SuppliersSectionProps> = ({ suppliers, o
       {/* Filter / Search Bar */}
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
+        <input autoComplete="off"
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -288,7 +288,7 @@ export const SuppliersSection: React.FC<SuppliersSectionProps> = ({ suppliers, o
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
                   Nombre del Proveedor *
                 </label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   required
                   value={name}
@@ -302,7 +302,7 @@ export const SuppliersSection: React.FC<SuppliersSectionProps> = ({ suppliers, o
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
                   Persona de Contacto
                 </label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
@@ -315,7 +315,7 @@ export const SuppliersSection: React.FC<SuppliersSectionProps> = ({ suppliers, o
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
                   Teléfono / WhatsApp
                 </label>
-                <input
+                <input autoComplete="off"
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -331,7 +331,7 @@ export const SuppliersSection: React.FC<SuppliersSectionProps> = ({ suppliers, o
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
                   Correo Electrónico
                 </label>
-                <input
+                <input autoComplete="off"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

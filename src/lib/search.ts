@@ -1,4 +1,4 @@
-import { Product } from '../types';
+import { Product, ProductPackaging } from '../types';
 import {
   normalizeSearchText,
   normalizeString,
@@ -7,6 +7,14 @@ import {
 } from './textSearch';
 
 export { normalizeSearchText, normalizeString, levenshteinDistance, isFuzzyMatch };
+
+export function getPackagingBarcode(product: Product, packaging: ProductPackaging): string {
+  if (packaging.barcode && packaging.barcode.trim()) {
+    return packaging.barcode.trim();
+  }
+  const baseCode = product.barcode || product.id;
+  return `${baseCode}-${packaging.unitsPerPackage}`;
+}
 
 export function isFuzzyNameMatch(productName: string, searchQuery: string): boolean {
   return isFuzzyMatch(searchQuery, productName);
@@ -42,7 +50,7 @@ export function compareProductsNatural(a: Product, b: Product, recentSalesCount?
 }
 
 export function matchesProductExactOrSubstring(
-  product: { name: string; category: string; barcode?: string; id: string; code?: string; sku?: string },
+  product: Product | { name: string; category: string; barcode?: string; id: string; code?: string; sku?: string; packagings?: ProductPackaging[] },
   searchQuery: string
 ): boolean {
   const queryClean = searchQuery.trim();
@@ -55,11 +63,18 @@ export function matchesProductExactOrSubstring(
   const cleanSku = product.sku ? product.sku.trim().replace(/^0+/, '') : '';
   const cleanQueryCode = queryClean.replace(/^0+/, '');
 
-  const isExactCodeMatch =
+  let isExactCodeMatch =
     (cleanBarcode && cleanBarcode === cleanQueryCode) ||
     (cleanId && cleanId === cleanQueryCode) ||
     (cleanCode && cleanCode === cleanQueryCode) ||
     (cleanSku && cleanSku === cleanQueryCode);
+
+  if (!isExactCodeMatch && product.packagings && product.packagings.length > 0) {
+    isExactCodeMatch = product.packagings.some((pkg) => {
+      const pkgBarcode = getPackagingBarcode(product as Product, pkg).trim().replace(/^0+/, '');
+      return pkgBarcode && pkgBarcode === cleanQueryCode;
+    });
+  }
 
   if (isExactCodeMatch) {
     return true;
@@ -75,7 +90,14 @@ export function matchesProductExactOrSubstring(
   const normalizedCategory = normalizeString(product.category || '');
   const normalizedCode = normalizeString(product.code || '');
   const normalizedSku = normalizeString(product.sku || '');
-  const combinedText = `${normalizedName} ${normalizedCategory} ${normalizedCode} ${normalizedSku}`;
+  
+  const pkgTexts = product.packagings
+    ? product.packagings
+        .map((pkg) => `${normalizeString(pkg.name)} ${normalizeString(getPackagingBarcode(product as Product, pkg))}`)
+        .join(' ')
+    : '';
+
+  const combinedText = `${normalizedName} ${normalizedCategory} ${normalizedCode} ${normalizedSku} ${pkgTexts}`;
 
   return tokens.every((token) => combinedText.includes(token));
 }
@@ -165,7 +187,11 @@ export function rankSearchResults(
       const cleanSku = p.sku ? p.sku.trim().replace(/^0+/, '') : '';
       const cleanQuery = queryClean.replace(/^0+/, '').toLowerCase();
 
-      const codes = [cleanBarcode, cleanId, cleanCode, cleanSku]
+      const pkgCodes = p.packagings
+        ? p.packagings.map((pkg) => getPackagingBarcode(p, pkg).trim().replace(/^0+/, ''))
+        : [];
+
+      const codes = [cleanBarcode, cleanId, cleanCode, cleanSku, ...pkgCodes]
         .filter(Boolean)
         .map((c) => c.toLowerCase());
 

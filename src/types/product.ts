@@ -9,6 +9,7 @@ export interface ProductPackaging {
   unitsPerPackage: number;
   price: number; // precio de venta de ESE empaque completo
   taxExempt?: boolean;
+  barcode?: string;
 }
 
 export interface Product {

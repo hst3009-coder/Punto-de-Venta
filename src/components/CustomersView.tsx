@@ -410,7 +410,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           <div className="p-4 border-b border-slate-100 space-y-3 shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
+              <input autoComplete="off"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -438,7 +438,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 
                 <div>
                   <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Nombre Completo *</label>
-                  <input
+                  <input autoComplete="off"
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
@@ -451,7 +451,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Celular</label>
-                    <input
+                    <input autoComplete="off"
                       type="text"
                       value={newPhone}
                       onChange={(e) => setNewPhone(e.target.value)}
@@ -461,7 +461,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </div>
                   <div>
                     <label className="text-[9px] font-black text-slate-400 uppercase block mb-1 font-mono">Límite Crédito</label>
-                    <input
+                    <input autoComplete="off"
                       type="number"
                       value={newCreditLimit}
                       disabled={newNoCreditLimit}
@@ -488,7 +488,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
                 <div>
                   <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Email</label>
-                  <input
+                  <input autoComplete="off"
                     type="email"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
@@ -499,7 +499,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
                 <div>
                   <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Deuda anterior (de otro sistema)</label>
-                  <input
+                  <input autoComplete="off"
                     type="number"
                     step="any"
                     value={newOpeningDebt}
@@ -663,7 +663,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">Monto a abonar</label>
                         <div className="relative">
                           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">RD$</span>
-                          <input
+                          <input autoComplete="off"
                             type="number"
                             step="any"
                             required
@@ -1023,7 +1023,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <form onSubmit={handleUpdateCustomer} className="space-y-3.5">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Nombre Completo *</label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
@@ -1035,7 +1035,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Celular</label>
-                  <input
+                  <input autoComplete="off"
                     type="text"
                     value={editPhone}
                     onChange={(e) => setEditPhone(e.target.value)}
@@ -1045,7 +1045,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Límite Crédito</label>
-                  <input
+                  <input autoComplete="off"
                     type="number"
                     value={editCreditLimit}
                     disabled={editNoCreditLimit}
@@ -1072,7 +1072,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Email</label>
-                <input
+                <input autoComplete="off"
                   type="email"
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
@@ -1099,7 +1099,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Deuda Anterior (No Editable)</label>
-                <input
+                <input autoComplete="off"
                   type="text"
                   disabled
                   value={`RD$ ${(selectedCustomer.openingDebt || 0).toFixed(2)}`}

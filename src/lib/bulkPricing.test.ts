@@ -58,4 +58,63 @@ describe('bulkPricing & priceLists validation rules', () => {
     expect(info.priceListFallbackNoCost).toBe(true);
     expect(info.unitPrice).toBe(200);
   });
+
+  it('applies bulk pricing based on real units when buying by packaging (2 pkgs x 3 units = 6 units)', () => {
+    const product: Product = {
+      id: 'p2',
+      name: 'Refresco Cola',
+      price: 35,
+      cost: 15,
+      stock: 100,
+      category: 'Bebidas',
+      color: '#000000',
+      emoji: '🥤',
+      bulkPricing: [
+        { minQuantity: 6, price: 25 }, // 6+ u -> $25/unit
+      ],
+      packagings: [
+        { id: 'pkg1', name: 'Paquete 3u', unitsPerPackage: 3, price: 100 }, // $33.33/unit
+      ],
+    };
+
+    const packaging = product.packagings![0];
+
+    // Buying 2 packages = 6 units. Bulk pricing at 6+ units ($25/u) beats packaging ($33.33/u).
+    const info = getEffectiveItemInfo(product, 2, null, packaging);
+
+    expect(info.appliedType).toBe('bulk_pricing');
+    expect(info.bulkTierApplied?.minQuantity).toBe(6);
+    // Effective price per package slot should be 25 * 3 = 75
+    expect(info.unitPrice).toBe(75);
+    // Total for row = 75 * 2 = 150 (25 * 6 real units)
+    expect(info.unitPrice * 2).toBe(150);
+  });
+
+  it('keeps packaging price if packaging is cheaper per unit than bulk pricing tier', () => {
+    const product: Product = {
+      id: 'p3',
+      name: 'Agua MIneral',
+      price: 35,
+      cost: 10,
+      stock: 100,
+      category: 'Bebidas',
+      color: '#000000',
+      emoji: '💧',
+      bulkPricing: [
+        { minQuantity: 6, price: 25 }, // 6+ u -> $25/unit
+      ],
+      packagings: [
+        { id: 'pkg1', name: 'Paquete 3u', unitsPerPackage: 3, price: 60 }, // $20/unit
+      ],
+    };
+
+    const packaging = product.packagings![0];
+
+    // Buying 2 packages = 6 units. Packaging ($20/u) is cheaper than bulk pricing ($25/u).
+    const info = getEffectiveItemInfo(product, 2, null, packaging);
+
+    expect(info.appliedType).toBe('packaging');
+    expect(info.unitPrice).toBe(60);
+    expect(info.unitPrice * 2).toBe(120);
+  });
 });

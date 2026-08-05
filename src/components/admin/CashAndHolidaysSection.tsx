@@ -25,7 +25,7 @@ export const CashAndHolidaysSection: React.FC<CashAndHolidaysSectionProps> = ({
           <label className="text-xs font-bold text-slate-700 block">Efectivo Inicial por Defecto (RD$)</label>
         </div>
         <div className="relative">
-          <input
+          <input autoComplete="off"
             type="number"
             step="1"
             min="0"
@@ -54,7 +54,7 @@ export const CashAndHolidaysSection: React.FC<CashAndHolidaysSectionProps> = ({
 
         {/* Formulario para agregar feriado */}
         <div className="flex gap-2">
-          <input
+          <input autoComplete="off"
             type="date"
             id="new-holiday-date"
             className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"

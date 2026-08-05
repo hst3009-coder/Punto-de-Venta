@@ -76,7 +76,7 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
             <p className="text-xs text-slate-500 font-medium">
               ${product.price.toFixed(2)} c/u • inv: {product.stock - unitsDeducted}
             </p>
-            {selectedPackaging && (
+            {selectedPackaging && appliedPriceType !== 'bulk_pricing' && (
               <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded-md flex items-center gap-1">
                 <Package className="w-3 h-3 text-indigo-600 shrink-0" />
                 Empaque ({selectedPackaging.unitsPerPackage} u/empaque)
@@ -98,7 +98,9 @@ export const CartItemRow = React.memo<CartItemRowProps>(({
             {appliedPriceType === 'bulk_pricing' && bulkTierApplied && (
               <span className="text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-300 px-1.5 py-0.2 rounded-md flex items-center gap-1 shadow-2xs">
                 <Tag className="w-3 h-3 text-amber-600 shrink-0" />
-                Precio por volumen: {bulkTierApplied.minQuantity}+ unidades
+                {selectedPackaging
+                  ? `Precio por volumen aplicado: ${bulkTierApplied.minQuantity}+ unidades`
+                  : `Precio por volumen: ${bulkTierApplied.minQuantity}+ unidades`}
               </span>
             )}
 

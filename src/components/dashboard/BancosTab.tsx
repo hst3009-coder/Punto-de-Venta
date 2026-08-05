@@ -578,7 +578,7 @@ export const BancosTab: React.FC<BancosTabProps> = ({
                 <label className="text-xs font-bold text-slate-700 block">Monto Depositado Real (Banco)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">RD$</span>
-                  <input
+                  <input autoComplete="off"
                     type="number"
                     step="0.01"
                     min="0"

@@ -63,14 +63,14 @@ export const BankAccountsSection: React.FC<BankAccountsSectionProps> = ({
       {/* Formulario para agregar cuenta bancaria */}
       <div className="space-y-2">
         <div className="flex gap-2">
-          <input
+          <input autoComplete="off"
             type="text"
             placeholder="Banco (ej. Banreservas)"
             value={newBankName}
             onChange={(e) => setNewBankName(e.target.value)}
             className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
           />
-          <input
+          <input autoComplete="off"
             type="text"
             placeholder="Etiqueta (ej. Cuenta 1234)"
             value={newAccountLabel}

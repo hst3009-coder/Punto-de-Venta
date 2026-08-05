@@ -621,7 +621,7 @@ export const DatabaseControlCenter: React.FC<DatabaseControlCenterProps> = ({
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input 
+                    <input autoComplete="off" 
                       type="text"
                       placeholder="Buscar en esta colección..."
                       value={searchQueryStr}
@@ -783,7 +783,7 @@ export const DatabaseControlCenter: React.FC<DatabaseControlCenterProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <input
+                      <input autoComplete="off"
                         type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                         step={f.type === 'number' ? 'any' : undefined}
                         required={f.required}

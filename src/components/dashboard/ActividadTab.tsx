@@ -252,7 +252,7 @@ export const ActividadTab: React.FC<ActividadTabProps> = ({
           {/* Text Search */}
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
+            <input autoComplete="off"
               type="text"
               placeholder="Buscar en la descripción o empleado..."
               value={searchQuery}

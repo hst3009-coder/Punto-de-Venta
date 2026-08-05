@@ -1,6 +1,7 @@
 import React from 'react';
 import { Product, ProductPackaging } from '../types';
-import { X, Package, CheckCircle2, Tag } from 'lucide-react';
+import { getPackagingBarcode } from '../lib/search';
+import { X, Package, Tag } from 'lucide-react';
 
 interface PackagingSelectModalProps {
   isOpen: boolean;
@@ -64,8 +65,11 @@ export const PackagingSelectModal: React.FC<PackagingSelectModalProps> = ({
                 <span className="text-xs font-black text-slate-800 uppercase tracking-tight block">
                   Unidad Individual
                 </span>
-                <span className="text-[10px] font-semibold text-slate-400">
+                <span className="text-[10px] font-semibold text-slate-400 block">
                   1 unidad suelta • Stock: {product.stock}
+                </span>
+                <span className="text-[10px] font-mono text-slate-500 font-bold block mt-0.5">
+                  Cód: {product.barcode || product.id}
                 </span>
               </div>
             </div>
@@ -82,6 +86,7 @@ export const PackagingSelectModal: React.FC<PackagingSelectModalProps> = ({
           {/* Packagings Options */}
           {packagings.map((pkg) => {
             const unitEquiv = pkg.unitsPerPackage > 0 ? (pkg.price / pkg.unitsPerPackage) : pkg.price;
+            const pkgBarcode = getPackagingBarcode(product, pkg);
             return (
               <button
                 key={pkg.id}
@@ -99,11 +104,14 @@ export const PackagingSelectModal: React.FC<PackagingSelectModalProps> = ({
                     <span className="text-xs font-black text-slate-900 uppercase tracking-tight block">
                       {pkg.name}
                     </span>
-                    <span className="text-[10px] font-bold text-indigo-800">
+                    <span className="text-[10px] font-bold text-indigo-800 block">
                       Contiene {pkg.unitsPerPackage} {pkg.unitsPerPackage === 1 ? 'unidad' : 'unidades'}
                       <span className="text-slate-400 font-normal ml-1">
                         (RD$ {unitEquiv.toFixed(2)}/u)
                       </span>
+                    </span>
+                    <span className="text-[10px] font-mono text-indigo-900 font-bold block mt-0.5">
+                      Cód: {pkgBarcode}
                     </span>
                   </div>
                 </div>

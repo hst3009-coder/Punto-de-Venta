@@ -444,7 +444,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                   </label>
                   <div className="relative">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
+                    <input autoComplete="off"
                       type="text"
                       value={productSearch}
                       onChange={(e) => {
@@ -457,7 +457,6 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                       onFocus={() => setShowProductDropdown(true)}
                       placeholder="Escribe nombre, código o SKU..."
                       className="w-full pl-9 pr-4 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                      autoComplete="off"
                     />
                   </div>
 
@@ -501,7 +500,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                     <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">
                       Cantidad
                     </label>
-                    <input
+                    <input autoComplete="off"
                       type="number"
                       min="1"
                       step="any"
@@ -518,7 +517,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                     <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wide block">
                       Costo Total (RD$)
                     </label>
-                    <input
+                    <input autoComplete="off"
                       type="number"
                       min="0"
                       step="any"
@@ -601,7 +600,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
 
             <div className="mt-3 relative">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
+              <input autoComplete="off"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -924,7 +923,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Monto de la Nota (RD$)</label>
                 <div className="relative">
                   <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
+                  <input autoComplete="off"
                     type="number"
                     step="0.01"
                     min="0.01"

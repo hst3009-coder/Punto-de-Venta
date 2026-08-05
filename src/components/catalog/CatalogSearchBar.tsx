@@ -43,7 +43,7 @@ export const CatalogSearchBar: React.FC<CatalogSearchBarProps> = ({
         <div className="relative flex-1 flex items-center gap-2 max-w-2xl animate-fade-in">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
+            <input autoComplete="off"
               ref={searchInputRef}
               type="text"
               autoFocus

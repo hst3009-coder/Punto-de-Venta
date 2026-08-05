@@ -65,7 +65,7 @@ export const PaymentTypesSection: React.FC<PaymentTypesSectionProps> = ({
 
       {/* Formulario para agregar tipo de cobro */}
       <div className="flex gap-2">
-        <input
+        <input autoComplete="off"
           type="text"
           placeholder="Ej. Transferencia USD, Cheque"
           value={newPaymentTypeLabel}

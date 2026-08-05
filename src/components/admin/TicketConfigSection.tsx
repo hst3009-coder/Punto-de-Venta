@@ -152,7 +152,7 @@ export const TicketConfigSection: React.FC<TicketConfigSectionProps> = ({
       {ticketConfig.showFooterMessage && (
         <div className="space-y-1">
           <label className="text-[11px] font-bold text-slate-600 block">Mensaje de Pie de Ticket</label>
-          <input
+          <input autoComplete="off"
             type="text"
             value={ticketConfig.footerMessageText || ''}
             onChange={(e) =>

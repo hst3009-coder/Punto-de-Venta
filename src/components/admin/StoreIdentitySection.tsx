@@ -33,7 +33,7 @@ export const StoreIdentitySection: React.FC<StoreIdentitySectionProps> = ({
               Ver en factura
             </label>
           </div>
-          <input
+          <input autoComplete="off"
             type="text"
             value={identity.name || ''}
             onChange={(e) => onUpdateIdentity({ ...identity, name: e.target.value })}
@@ -55,7 +55,7 @@ export const StoreIdentitySection: React.FC<StoreIdentitySectionProps> = ({
               Ver en factura
             </label>
           </div>
-          <input
+          <input autoComplete="off"
             type="text"
             value={identity.slogan || ''}
             onChange={(e) => onUpdateIdentity({ ...identity, slogan: e.target.value })}
@@ -77,7 +77,7 @@ export const StoreIdentitySection: React.FC<StoreIdentitySectionProps> = ({
               Ver en factura
             </label>
           </div>
-          <input
+          <input autoComplete="off"
             type="text"
             value={identity.address || ''}
             onChange={(e) => onUpdateIdentity({ ...identity, address: e.target.value })}
@@ -99,7 +99,7 @@ export const StoreIdentitySection: React.FC<StoreIdentitySectionProps> = ({
               Ver en factura
             </label>
           </div>
-          <input
+          <input autoComplete="off"
             type="text"
             value={identity.phone || ''}
             onChange={(e) => onUpdateIdentity({ ...identity, phone: e.target.value })}
@@ -130,7 +130,7 @@ export const StoreIdentitySection: React.FC<StoreIdentitySectionProps> = ({
               )}
             </div>
             <div className="flex-1 space-y-1.5">
-              <input
+              <input autoComplete="off"
                 type="text"
                 value={identity.logoUrl || ''}
                 placeholder="Ej: ☕ o enlace de imagen"

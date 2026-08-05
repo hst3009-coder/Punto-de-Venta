@@ -86,8 +86,8 @@ export const CartTotalOverrideModal: React.FC<CartTotalOverrideModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden transition-all">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[95dvh] overflow-y-auto transition-all">
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
           <div className="flex items-center gap-2.5">
@@ -127,7 +127,7 @@ export const CartTotalOverrideModal: React.FC<CartTotalOverrideModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
               Nuevo Total Deseado para la Venta (RD$) *
             </label>
-            <input
+            <input autoComplete="off"
               ref={inputRef}
               type="number"
               step="0.01"

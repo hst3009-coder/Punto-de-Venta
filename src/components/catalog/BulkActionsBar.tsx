@@ -111,7 +111,7 @@ export const BulkActionsBar: React.FC<BulkActionsBarProps> = ({
                   ) : (
                     <Percent className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                   )}
-                  <input
+                  <input autoComplete="off"
                     type="number"
                     placeholder={batchPriceMode === 'fixed' ? 'Nuevo precio RD$' : '% ejemplo: 10 o -5'}
                     value={batchPriceValue}

@@ -157,8 +157,9 @@ export const InventarioTab: React.FC<InventarioTabProps> = ({
             <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Catálogo y Clasificación ABC</h3>
             <p className="text-[10px] text-slate-400 font-bold uppercase">Análisis de rentabilidad y stock</p>
           </div>
-          <div className="overflow-x-auto flex-1 max-h-[600px]">
-            <table className="w-full text-left">
+          <div className="flex-1 max-h-[600px] overflow-y-auto">
+            {/* Desktop Table */}
+            <table className="w-full text-left hidden md:table">
               <thead className="sticky top-0 bg-white border-b border-slate-100 z-10">
                 <tr>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Producto</th>
@@ -204,6 +205,45 @@ export const InventarioTab: React.FC<InventarioTabProps> = ({
                 ))}
               </tbody>
             </table>
+
+            {/* Mobile Cards */}
+            <div className="block md:hidden p-4 space-y-3">
+              {inventoryStats.abcProducts.map(p => (
+                <div key={p.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xl shrink-0">{p.emoji}</span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-black text-slate-800 block truncate">{getStringValue(p.name)}</span>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase">{getStringValue(p.category)}</span>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black text-white shrink-0 ${
+                      p.abcClass === 'A' ? 'bg-emerald-500' : p.abcClass === 'B' ? 'bg-amber-500' : 'bg-slate-400'
+                    }`}>
+                      Clase {p.abcClass}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 text-[10px] font-mono">
+                    <div>
+                      <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Ventas 90d</span>
+                      <span className="font-black text-slate-700">RD$ {p.revenue.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Stock</span>
+                      <span className={`font-black ${p.stock <= (p.minStock || 0) ? 'text-rose-600' : 'text-slate-700'}`}>
+                        {p.stock}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Valor Est.</span>
+                      <span className="font-black text-slate-500">RD$ {(p.stock * (p.cost || 0)).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -265,7 +265,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                   </label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-bold">$</span>
-                    <input
+                    <input autoComplete="off"
                       type="number"
                       step="any"
                       required
@@ -325,7 +325,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                       <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
                         <Hash className="w-3.5 h-3.5" /> # Factura (opcional)
                       </label>
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         placeholder="Ej. 1234, FACT-0092..."
                         value={invoiceNumber}
@@ -339,7 +339,7 @@ export const ExpensesModal: React.FC<ExpensesModalProps> = ({
                     <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
                       <FileText className="w-3.5 h-3.5" /> Concepto / Razón
                     </label>
-                    <input
+                    <input autoComplete="off"
                       type="text"
                       required
                       placeholder="Ej. Pago de basura, compra de bolsas..."

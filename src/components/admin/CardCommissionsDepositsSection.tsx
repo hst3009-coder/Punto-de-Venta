@@ -28,7 +28,7 @@ export const CardCommissionsDepositsSection: React.FC<CardCommissionsDepositsSec
       <div className="space-y-1.5">
         <label className="text-xs font-bold text-slate-500 block">Comisión de Tarjeta (%)</label>
         <div className="relative">
-          <input
+          <input autoComplete="off"
             type="number"
             step="0.1"
             min="0"

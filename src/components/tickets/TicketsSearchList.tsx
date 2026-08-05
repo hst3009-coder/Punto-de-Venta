@@ -174,7 +174,7 @@ export const TicketsSearchList: React.FC<TicketsSearchListProps> = ({
           {/* Search query input */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-            <input
+            <input autoComplete="off"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -200,7 +200,7 @@ export const TicketsSearchList: React.FC<TicketsSearchListProps> = ({
             }`}
           >
             <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-            <input
+            <input autoComplete="off"
               type="date"
               value={selectedDateStr}
               onChange={(e) => {

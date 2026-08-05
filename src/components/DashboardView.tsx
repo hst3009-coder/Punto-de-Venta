@@ -48,6 +48,7 @@ import {
   Star,
   PanelLeftClose,
   PanelLeftOpen,
+  Menu,
 } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -166,6 +167,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const permissions = usePermissions(currentEmployee);
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('resumen');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [favoriteTabs, setFavoriteTabs] = useState<DashboardTab[]>(() => {
     try {
       const saved = localStorage.getItem('pos_dashboard_favorite_tabs');
@@ -515,7 +517,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </button>
 
                 {filterType === 'Día' && (
-                  <input
+                  <input autoComplete="off"
                     type="date"
                     value={selectedDay.toISOString().split('T')[0]}
                     onChange={(e) => {
@@ -528,7 +530,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 )}
 
                 {filterType === 'Semana' && (
-                  <input
+                  <input autoComplete="off"
                     type="date"
                     value={selectedWeekAnchor.toISOString().split('T')[0]}
                     onChange={(e) => {
@@ -543,14 +545,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             ) : (
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1 shadow-xs">
                 <span className="text-[10px] font-black uppercase text-slate-400">Desde</span>
-                <input
+                <input autoComplete="off"
                   type="date"
                   value={customRangeStart}
                   onChange={(e) => setCustomRangeStart(e.target.value)}
                   className="bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs font-mono text-slate-600 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 />
                 <span className="text-[10px] font-black uppercase text-slate-400">Hasta</span>
-                <input
+                <input autoComplete="off"
                   type="date"
                   value={customRangeEnd}
                   onChange={(e) => setCustomRangeEnd(e.target.value)}
@@ -573,12 +575,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </header>
 
       {/* 2. Main Workspace Layout with Vertical Navigation Sidebar */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Sidebar Navigation */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 relative">
+        
+        {/* Mobile Sub-Views Navigation Trigger Bar (visible only on mobile) */}
+        <div className="md:hidden bg-slate-100 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg shrink-0">
+              {tabs.find(t => t.id === activeTab)?.icon}
+            </span>
+            <div className="min-w-0">
+              <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">Sub-vista Activa</span>
+              <span className="text-xs font-bold text-slate-900 truncate block">{tabs.find(t => t.id === activeTab)?.label}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 ml-2"
+          >
+            <Menu className="w-4 h-4" />
+            <span>Sub-vistas</span>
+          </button>
+        </div>
+
+        {/* Sidebar Navigation (Desktop) */}
         <aside
-          className={`${
+          className={`hidden md:flex ${
             isPanelCollapsed ? 'w-16 p-2' : 'w-64 p-3'
-          } shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-y-auto space-y-1 select-none transition-all duration-200`}
+          } shrink-0 bg-white border-r border-slate-200 flex-col overflow-y-auto space-y-1 select-none transition-all duration-200`}
         >
           {/* Collapse / Expand Toggle Header */}
           <div
@@ -1012,7 +1036,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="flex gap-2">
-              <input
+              <input autoComplete="off"
                 type="text"
                 placeholder="Código de la nota (ej. NC-1001)..."
                 value={queryCreditNoteCode}
@@ -1102,6 +1126,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               >
                 Confirmar Anulación
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Sub-Views Selector Modal */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-200 max-h-[85vh] flex flex-col animate-scale-up">
+            <div className="p-4 border-b border-slate-150 bg-slate-50 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <LayoutDashboard className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-extrabold text-sm text-slate-900 uppercase tracking-tight">Seleccionar Sub-vista</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl bg-white border border-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 overflow-y-auto space-y-1.5 flex-1">
+              {tabs.map((tab) => {
+                const isSelected = activeTab === tab.id;
+                const isFav = favoriteTabs.includes(tab.id);
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-md font-black'
+                        : 'text-slate-700 bg-slate-50 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="shrink-0">{tab.icon}</span>
+                      <span className="truncate">{tab.label}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isFav && <Star className="w-4 h-4 fill-amber-400 text-amber-400" />}
+                      {isSelected && <Check className="w-4 h-4 text-white" />}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

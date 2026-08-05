@@ -257,7 +257,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ currentEmployee })
             {/* Name */}
             <div>
               <label className="text-xs font-bold text-slate-500 block mb-1">Nombre Completo</label>
-              <input
+              <input autoComplete="off"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -349,7 +349,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ currentEmployee })
                   </label>
                   <div className="relative">
                     <Key className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                    <input
+                    <input autoComplete="off"
                       type="password"
                       inputMode="numeric"
                       pattern="[0-9]*"

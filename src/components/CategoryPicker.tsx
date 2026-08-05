@@ -130,7 +130,7 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
     <div ref={containerRef} className={`relative w-full ${className}`}>
       <div className="relative flex items-center">
         <Folder className="absolute left-3 w-4 h-4 text-slate-400 pointer-events-none" />
-        <input
+        <input autoComplete="off"
           id={id}
           type="text"
           value={isOpen ? value : displayValue}
@@ -143,7 +143,6 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none transition-all uppercase"
-          autoComplete="off"
         />
         <button
           type="button"

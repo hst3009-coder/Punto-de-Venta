@@ -455,7 +455,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
             <div className="sm:col-span-2 grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[10px] font-bold text-slate-400 block mb-1">Desde:</label>
-                <input
+                <input autoComplete="off"
                   type="date"
                   value={startDate}
                   onChange={e => setStartDate(e.target.value)}
@@ -464,7 +464,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 block mb-1">Hasta:</label>
-                <input
+                <input autoComplete="off"
                   type="date"
                   value={endDate}
                   onChange={e => setEndDate(e.target.value)}
@@ -523,7 +523,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
             <label className="text-[10px] font-bold text-slate-400 block mb-1">Buscar:</label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-              <input
+              <input autoComplete="off"
                 type="text"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -750,7 +750,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                   </label>
                   <div className="relative">
                     <DollarSign className="w-5 h-5 absolute left-3.5 top-3 text-slate-400" />
-                    <input
+                    <input autoComplete="off"
                       type="number"
                       step="0.01"
                       min="0.01"
@@ -780,7 +780,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                       <label className="text-xs font-black uppercase text-slate-500 tracking-wider block mb-1.5">
                         # Factura (opcional)
                       </label>
-                      <input
+                      <input autoComplete="off"
                         type="text"
                         placeholder="Ej. 1234, FACT-0092..."
                         value={invoiceNumber}
@@ -794,7 +794,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                     <label className="text-xs font-black uppercase text-slate-500 tracking-wider block mb-1.5">
                       Concepto / Descripción
                     </label>
-                    <input
+                    <input autoComplete="off"
                       type="text"
                       required
                       value={concept}
@@ -821,7 +821,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                   </select>
 
                   {category === 'Otro' && (
-                    <input
+                    <input autoComplete="off"
                       type="text"
                       required
                       value={customCategory}

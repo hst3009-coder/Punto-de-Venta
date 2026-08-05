@@ -125,7 +125,7 @@ export const NotasCreditoTab: React.FC<NotasCreditoTabProps> = ({
       {/* Search & Filter Controls */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
-          <input
+          <input autoComplete="off"
             type="text"
             placeholder="Buscar por código de nota o empleado..."
             value={creditNoteSearch}
@@ -168,85 +168,149 @@ export const NotasCreditoTab: React.FC<NotasCreditoTabProps> = ({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                  <th className="py-3 px-4">Código</th>
-                  <th className="py-3 px-4">Monto Original</th>
-                  <th className="py-3 px-4">Saldo Disponible</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4">Empleado</th>
-                  <th className="py-3 px-4">Fecha de Emisión</th>
-                  {permissions.manageReturns && <th className="py-3 px-4 text-right">Acciones</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                {filteredNotes.map((note) => (
-                  <tr key={note.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-black text-indigo-600 text-sm">
-                      {note.code}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
-                      RD$ {note.originalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-extrabold text-emerald-600">
-                      RD$ {note.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-3.5 px-4">
+          <div>
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    <th className="py-3 px-4">Código</th>
+                    <th className="py-3 px-4">Monto Original</th>
+                    <th className="py-3 px-4">Saldo Disponible</th>
+                    <th className="py-3 px-4">Estado</th>
+                    <th className="py-3 px-4">Empleado</th>
+                    <th className="py-3 px-4">Fecha de Emisión</th>
+                    {permissions.manageReturns && <th className="py-3 px-4 text-right">Acciones</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                  {filteredNotes.map((note) => (
+                    <tr key={note.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-black text-indigo-600 text-sm">
+                        {note.code}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
+                        RD$ {note.originalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-extrabold text-emerald-600">
+                        RD$ {note.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {note.status === 'active' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Activa
+                          </span>
+                        )}
+                        {note.status === 'depleted' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                            Agotada
+                          </span>
+                        )}
+                        {note.status === 'voided' && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-300 w-fit">
+                              <Ban className="w-3 h-3 text-slate-400" />
+                              <span className="line-through">Anulada</span>
+                            </span>
+                            {note.voidReason && (
+                              <span className="text-[10px] text-slate-500 font-normal italic truncate max-w-[160px]" title={note.voidReason}>
+                                Motivo: {note.voidReason}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-slate-600">
+                        {note.employeeName || 'Sistema'}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-slate-500">
+                        {note.createdAt ? new Date(note.createdAt).toLocaleString('es-DO') : '—'}
+                      </td>
+                      {permissions.manageReturns && (
+                        <td className="py-3.5 px-4 text-right">
+                          {note.status === 'active' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNoteToVoid(note);
+                                setVoidReasonInput('');
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              Anular
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="block md:hidden p-4 space-y-3">
+              {filteredNotes.map((note) => (
+                <div key={note.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-black text-indigo-600 text-base">{note.code}</span>
+                    <div>
                       {note.status === 'active' && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           Activa
                         </span>
                       )}
                       {note.status === 'depleted' && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
                           Agotada
                         </span>
                       )}
                       {note.status === 'voided' && (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-300 w-fit">
-                            <Ban className="w-3 h-3 text-slate-400" />
-                            <span className="line-through">Anulada</span>
-                          </span>
-                          {note.voidReason && (
-                            <span className="text-[10px] text-slate-500 font-normal italic truncate max-w-[160px]" title={note.voidReason}>
-                              Motivo: {note.voidReason}
-                            </span>
-                          )}
-                        </div>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-300">
+                          <Ban className="w-3 h-3" />
+                          <span className="line-through">Anulada</span>
+                        </span>
                       )}
-                    </td>
-                    <td className="py-3.5 px-4 font-medium text-slate-600">
-                      {note.employeeName || 'Sistema'}
-                    </td>
-                    <td className="py-3.5 px-4 font-medium text-slate-500">
-                      {note.createdAt ? new Date(note.createdAt).toLocaleString('es-DO') : '—'}
-                    </td>
-                    {permissions.manageReturns && (
-                      <td className="py-3.5 px-4 text-right">
-                        {note.status === 'active' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNoteToVoid(note);
-                              setVoidReasonInput('');
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Ban className="w-3.5 h-3.5" />
-                            Anular
-                          </button>
-                        )}
-                      </td>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-2 border-t border-slate-200/60">
+                    <div>
+                      <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Original</span>
+                      <span className="font-black text-slate-800">
+                        RD$ {note.originalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-sans text-[9px] font-bold uppercase">Saldo Disponible</span>
+                      <span className="font-black text-emerald-600">
+                        RD$ {note.remainingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-[10px] text-slate-500 font-medium">
+                    <span>{note.employeeName || 'Sistema'} • {note.createdAt ? new Date(note.createdAt).toLocaleDateString('es-DO') : '—'}</span>
+                    {permissions.manageReturns && note.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNoteToVoid(note);
+                          setVoidReasonInput('');
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                      >
+                        Anular
+                      </button>
                     )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -192,7 +192,7 @@ const ProductRow: React.FC<ProductRowProps> = React.memo(({
               {activeEdit?.productId === prod.id && activeEdit?.field === 'sku' ? (
                 <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
                   <span className="text-[8px] font-bold text-indigo-600">SKU:</span>
-                  <input
+                  <input autoComplete="off"
                     type="text"
                     value={activeEdit.value || ''}
                     onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
@@ -234,7 +234,7 @@ const ProductRow: React.FC<ProductRowProps> = React.memo(({
               {activeEdit?.productId === prod.id && activeEdit?.field === 'code' ? (
                 <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
                   <span className="text-[9px] text-slate-400 font-mono font-bold">#</span>
-                  <input
+                  <input autoComplete="off"
                     type="text"
                     value={activeEdit.value || ''}
                     onChange={(e) => setActiveEdit({ ...activeEdit, value: e.target.value })}
@@ -280,7 +280,7 @@ const ProductRow: React.FC<ProductRowProps> = React.memo(({
       <td className="py-3.5 px-4 font-bold text-slate-650">
         {activeEdit?.productId === prod.id && activeEdit?.field === 'category' ? (
           <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
-            <input
+            <input autoComplete="off"
               type="text"
               list={`category-list-${prod.id}`}
               value={activeEdit.value || ''}
@@ -396,7 +396,7 @@ const ProductRow: React.FC<ProductRowProps> = React.memo(({
         {activeEdit?.productId === prod.id && activeEdit?.field === 'cost' ? (
           <div className="flex items-center justify-end gap-1" onMouseDown={(e) => e.stopPropagation()}>
             <span className="text-xs font-bold text-slate-400">RD$</span>
-            <input
+            <input autoComplete="off"
               type="number"
               step="0.01"
               min="0"
@@ -441,7 +441,7 @@ const ProductRow: React.FC<ProductRowProps> = React.memo(({
         {activeEdit?.productId === prod.id && activeEdit?.field === 'price' ? (
           <div className="flex items-center justify-end gap-1" onMouseDown={(e) => e.stopPropagation()}>
             <span className="text-xs font-bold text-slate-400">RD$</span>
-            <input
+            <input autoComplete="off"
               type="number"
               step="0.01"
               min="0"

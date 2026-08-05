@@ -768,7 +768,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
         <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full md:w-80">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
+            <input autoComplete="off"
               type="text"
               placeholder="Buscar por proveedor o #ID..."
               value={searchTerm}
@@ -1211,6 +1211,12 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                     placeholder="Buscar producto por nombre o código de barras..."
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && searchedProducts.length > 0) {
+                        e.preventDefault();
+                        handleAddProductToOrder(searchedProducts[0]);
+                      }
+                    }}
                     className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 focus:bg-white rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -1288,7 +1294,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                           <div className="flex items-center gap-3">
                             <div>
                               <label className="block text-[9px] font-black uppercase text-slate-400">Cant.</label>
-                              <input
+                              <input autoComplete="off"
                                 type="number"
                                 min={1}
                                 value={item.quantityOrdered}
@@ -1299,7 +1305,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
 
                             <div>
                               <label className="block text-[9px] font-black uppercase text-slate-400">Costo Estim. (RD$)</label>
-                              <input
+                              <input autoComplete="off"
                                 type="number"
                                 min={0}
                                 step="0.01"
@@ -1410,7 +1416,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                       </div>
 
                       <div className="col-span-2">
-                        <input
+                        <input autoComplete="off"
                           type="number"
                           min={0}
                           max={pendingQty}
@@ -1427,7 +1433,7 @@ export const ComprasTab: React.FC<ComprasTabProps> = ({
                       </div>
 
                       <div className="col-span-3 text-right">
-                        <input
+                        <input autoComplete="off"
                           type="number"
                           min={0}
                           step="0.01"
