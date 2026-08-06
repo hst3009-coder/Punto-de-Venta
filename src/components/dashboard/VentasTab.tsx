@@ -97,7 +97,7 @@ export const VentasTab: React.FC<VentasTabProps> = ({
       {/* Sales Chart */}
       <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs">
         <div className="mb-6">
-          <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Tendencia de Ventas Diaria</h3>
+          <h3 className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-wider">Tendencia de Ventas Diaria</h3>
           <p className="text-[10px] text-slate-400 font-bold uppercase">Ingresos brutos por fecha</p>
         </div>
         <div className="h-64">
@@ -118,7 +118,7 @@ export const VentasTab: React.FC<VentasTabProps> = ({
 
       {/* Closures List */}
       <div className="space-y-4">
-        <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Cortes de Caja (Cierres de Turno)</h3>
+        <h3 className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-wider">Cortes de Caja (Cierres de Turno)</h3>
         {closuresWithSales.length === 0 ? (
           <div className="p-12 text-center bg-white border border-dashed border-slate-200 rounded-3xl text-slate-400">
             <AlertCircle className="w-10 h-10 mx-auto mb-3 opacity-30" />

@@ -521,3 +521,5 @@ export const InventoryTab: React.FC<InventoryTabProps> = ({ products, onBatchSuc
     </div>
   );
 };
+
+export default InventoryTab;

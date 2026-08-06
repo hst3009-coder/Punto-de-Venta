@@ -12,13 +12,19 @@ function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string)
   return React.lazy(async () => {
     try {
       const m = await componentImport();
-      return { default: exportName ? m[exportName] : (m.default || m) };
+      const comp = exportName
+        ? (m[exportName] || m.default?.[exportName] || m.default || m)
+        : (m.default || m);
+      return { default: comp };
     } catch (error) {
       console.warn('Dynamic import failed, retrying...', error);
       try {
         await new Promise(resolve => setTimeout(resolve, 300));
         const m = await componentImport();
-        return { default: exportName ? m[exportName] : (m.default || m) };
+        const comp = exportName
+          ? (m[exportName] || m.default?.[exportName] || m.default || m)
+          : (m.default || m);
+        return { default: comp };
       } catch (retryErr) {
         throw retryErr;
       }
@@ -1383,7 +1389,7 @@ export default function App() {
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="font-bold text-xl tracking-tight text-slate-800 uppercase">
+                  <h1 className="font-bold text-base sm:text-lg md:text-xl tracking-tight text-slate-800 uppercase">
                     {storeIdentity.name || 'MI NEGOCIO'}
                   </h1>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
@@ -1391,7 +1397,7 @@ export default function App() {
                     Caja Abierta
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 font-medium">{storeIdentity.slogan || 'Terminal de Punto de Venta Inteligente'}</p>
+                <p className="text-[10px] sm:text-xs text-slate-500 font-medium">{storeIdentity.slogan || 'Terminal de Punto de Venta Inteligente'}</p>
               </div>
             </div>
 
@@ -2463,6 +2469,7 @@ export default function App() {
             clerkName={clerkName}
             currentEmployee={currentEmployee}
             closures={closures}
+            customers={customers}
             customerRefunds={customerRefunds}
             onAddCustomerRefund={handleAddCustomerRefund}
             creditNotes={creditNotes}

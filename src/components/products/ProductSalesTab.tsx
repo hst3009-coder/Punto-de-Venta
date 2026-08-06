@@ -469,3 +469,5 @@ export const ProductSalesTab: React.FC<ProductSalesTabProps> = ({ sales, product
     </div>
   );
 };
+
+export default ProductSalesTab;

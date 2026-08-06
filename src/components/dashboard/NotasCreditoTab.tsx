@@ -49,7 +49,7 @@ export const NotasCreditoTab: React.FC<NotasCreditoTabProps> = ({
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs">
         <div>
-          <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+          <h2 className="text-base sm:text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
             🏷️ Notas de Crédito
           </h2>
           <p className="text-xs font-semibold text-slate-500 mt-0.5">

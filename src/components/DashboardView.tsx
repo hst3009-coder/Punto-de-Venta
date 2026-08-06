@@ -58,18 +58,25 @@ import { useDashboardDateFilter } from '../hooks/useDashboardDateFilter';
 import { useAdminShiftManager } from '../hooks/useAdminShiftManager';
 import { useDashboardKPIs } from '../hooks/useDashboardKPIs';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { ClosureDetailModal } from './dashboard/ClosureDetailModal';
 
 function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string) {
   return React.lazy(async () => {
     try {
       const m = await componentImport();
-      return { default: exportName ? m[exportName] : m.default || m };
+      const comp = exportName
+        ? (m[exportName] || m.default?.[exportName] || m.default || m)
+        : (m.default || m);
+      return { default: comp };
     } catch (error) {
       console.warn('Dynamic import failed, retrying...', error);
       try {
         await new Promise((resolve) => setTimeout(resolve, 300));
         const m = await componentImport();
-        return { default: exportName ? m[exportName] : m.default || m };
+        const comp = exportName
+          ? (m[exportName] || m.default?.[exportName] || m.default || m)
+          : (m.default || m);
+        return { default: comp };
       } catch (retryErr) {
         throw retryErr;
       }
@@ -463,11 +470,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-lg font-black text-slate-850 flex items-center gap-2">
-              <LayoutDashboard className="w-5 h-5 text-indigo-600" />
+            <h1 className="text-base sm:text-lg md:text-xl font-black text-slate-850 flex items-center gap-2">
+              <LayoutDashboard className="w-5 h-5 text-indigo-600 shrink-0" />
               <span>Centro de Control y Analíticas</span>
             </h1>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-[10px] sm:text-[11px] text-slate-400 font-bold uppercase tracking-wider">
               Métricas de rendimiento del negocio
             </p>
           </div>
@@ -1130,6 +1137,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Closure Detail Modal */}
+      {selectedClosureModal && (
+        <ClosureDetailModal
+          closure={selectedClosureModal}
+          onClose={() => setSelectedClosureModal(null)}
+          sales={sales}
+          movements={movements}
+          customerRefunds={customerRefunds}
+          employees={employees}
+          customers={customers}
+          closures={closures}
+          dashboardConfig={dashboardConfig}
+        />
       )}
 
       {/* Mobile Sub-Views Selector Modal */}

@@ -193,7 +193,7 @@ export const BancosTab: React.FC<BancosTabProps> = ({
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex justify-between items-center pb-2 border-b border-slate-100">
           <div>
-            <h3 className="text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
+            <h3 className="text-xs sm:text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-500" />
               Pendientes por Confirmar
             </h3>

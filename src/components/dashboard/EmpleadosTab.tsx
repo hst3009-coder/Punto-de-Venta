@@ -294,7 +294,7 @@ export const EmpleadosTab: React.FC<EmpleadosTabProps> = ({
           {/* Panel: Turnos Abiertos */}
           <div className="bg-white border border-slate-200 rounded-3xl shadow-xs p-6">
             <div className="mb-4">
-              <h3 className="text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 Turnos Abiertos Actualmente
               </h3>
@@ -317,7 +317,7 @@ export const EmpleadosTab: React.FC<EmpleadosTabProps> = ({
           {/* Panel: Cierres Pendientes de Contar */}
           <div className="bg-white border border-slate-200 rounded-3xl shadow-xs p-6">
             <div className="mb-4">
-              <h3 className="text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-black text-slate-850 uppercase tracking-tight flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
                 Cierres Pendientes de Conteo
               </h3>

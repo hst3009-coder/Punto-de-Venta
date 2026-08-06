@@ -331,7 +331,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               <TrendingDown className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Gestión de Egresos</h2>
+              <h2 className="text-base sm:text-lg md:text-xl font-extrabold text-slate-900 tracking-tight">Gestión de Egresos</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Control completo de gastos operativos, facturas y salidas directas
               </p>

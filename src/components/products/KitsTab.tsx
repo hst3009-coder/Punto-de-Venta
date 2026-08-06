@@ -511,3 +511,5 @@ export const KitsTab: React.FC<KitsTabProps> = ({
     </div>
   );
 };
+
+export default KitsTab;

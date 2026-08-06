@@ -363,7 +363,7 @@ export const ReturnsView: React.FC<ReturnsViewProps> = ({
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-black uppercase text-slate-800 tracking-wider">Gestión de Devoluciones y Créditos</h2>
+            <h2 className="text-xs sm:text-sm md:text-base font-black uppercase text-slate-800 tracking-wider">Gestión de Devoluciones y Créditos</h2>
             <p className="text-[10px] font-bold text-slate-400">Devoluciones a proveedores y notas de crédito a favor</p>
           </div>
         </div>

@@ -230,7 +230,7 @@ export const ActividadTab: React.FC<ActividadTabProps> = ({
       {/* Header */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-900 flex items-center gap-2.5">
+          <h2 className="text-base sm:text-lg md:text-xl font-black text-slate-900 flex items-center gap-2.5">
             <Activity className="w-5 h-5 text-indigo-600" />
             <span>Registro de Auditoría y Actividad</span>
           </h2>

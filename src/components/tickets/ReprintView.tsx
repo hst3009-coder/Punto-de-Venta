@@ -1,7 +1,9 @@
 import React from 'react';
-import { Sale, PaymentMethod, StoreIdentity, CartItem, DashboardConfig, isMixedSale } from '../../types';
+import { Sale, PaymentMethod, StoreIdentity, CartItem, DashboardConfig, isMixedSale, Closure, Customer } from '../../types';
 import { Receipt, Undo2, Printer, Edit, Coins, CreditCard, Wallet, QrCode } from 'lucide-react';
 import { ReceiptTemplate } from '../ReceiptTemplate';
+import { isEventWithinClosedShift } from '../../lib/dashboardCalculations';
+import { getSaleTimestamp } from '../../lib/dates';
 
 export interface ReprintViewProps {
   selectedSale: Sale | null;
@@ -10,9 +12,10 @@ export interface ReprintViewProps {
   clerkName: string;
   storeIdentity: StoreIdentity;
   dashboardConfig?: DashboardConfig;
+  customers?: Customer[];
+  closures?: Closure[];
   isEditingPayment: boolean;
   setIsEditingPayment: (editing: boolean) => void;
-  handleUpdatePaymentMethod: (method: PaymentMethod) => void;
   getPaymentBadge: (method: PaymentMethod) => React.ReactNode;
   handleOpenItemReturn: (item: CartItem) => void;
 }
@@ -24,9 +27,10 @@ export const ReprintView: React.FC<ReprintViewProps> = ({
   clerkName,
   storeIdentity,
   dashboardConfig,
+  customers = [],
+  closures = [],
   isEditingPayment,
   setIsEditingPayment,
-  handleUpdatePaymentMethod,
   getPaymentBadge,
   handleOpenItemReturn,
 }) => {
@@ -45,6 +49,13 @@ export const ReprintView: React.FC<ReprintViewProps> = ({
       </div>
     );
   }
+
+  // Determine if sale is editable: sale is NOT cancelled AND NOT within a closed shift
+  const isSaleEditable = Boolean(
+    selectedSale &&
+    !selectedSale.isCancelled &&
+    !isEventWithinClosedShift(selectedSale.soldBy?.id, getSaleTimestamp(selectedSale), closures)
+  );
 
   return (
     <div className="w-1/2 flex flex-col bg-slate-50 overflow-y-auto">
@@ -105,92 +116,61 @@ export const ReprintView: React.FC<ReprintViewProps> = ({
             </button>
           </div>
 
-          {/* 2. PAYMENT METHOD EDITOR */}
+          {/* 2. PAYMENT METHOD & CUSTOMER EDITOR */}
           <div className="border-t border-slate-100 pt-4 space-y-2.5">
             <div className="flex justify-between items-center">
               <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1">
-                <Edit className="w-3.5 h-3.5 text-indigo-500" /> Método de Pago:
+                <Edit className="w-3.5 h-3.5 text-indigo-500" /> Método de Pago y Cliente:
               </span>
-              {isEditingPayment ? (
+              {isSaleEditable && (
                 <button
-                  onClick={() => setIsEditingPayment(false)}
-                  className="text-[10px] font-black text-slate-400 hover:text-slate-600"
-                >
-                  Cancelar
-                </button>
-              ) : (
-                <button
+                  type="button"
                   onClick={() => setIsEditingPayment(true)}
-                  className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 hover:underline"
+                  className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 hover:underline cursor-pointer"
                 >
                   Editar Pago
                 </button>
               )}
             </div>
 
-            {isEditingPayment ? (
-              <div className="grid grid-cols-4 gap-1.5">
-                {(['cash', 'card', 'transfer', 'qr'] as PaymentMethod[]).map((method) => {
-                  const isCurrent = selectedSale.paymentMethod === method;
-                  return (
-                    <button
-                      key={method}
-                      onClick={() => handleUpdatePaymentMethod(method)}
-                      className={`py-2 px-1 rounded-xl text-[9px] font-black flex flex-col items-center gap-1 border transition-all ${
-                        isCurrent
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer'
-                      }`}
-                    >
-                      {method === 'cash' && <Coins className="w-3.5 h-3.5" />}
-                      {method === 'card' && <CreditCard className="w-3.5 h-3.5" />}
-                      {method === 'transfer' && <Wallet className="w-3.5 h-3.5" />}
-                      {method === 'qr' && <QrCode className="w-3.5 h-3.5" />}
-                      <span className="capitalize">
-                        {method === 'cash'
-                          ? 'Efectivo'
-                          : method === 'card'
-                          ? 'Tarjeta'
-                          : method === 'transfer'
-                          ? 'Transf.'
-                          : 'QR'}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-150 flex justify-between items-center">
+                <span>Cliente:</span>
+                <span className="font-extrabold text-slate-800">
+                  {selectedSale.customerName || 'Público General'}
+                </span>
+              </div>
+
+              <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-150 flex justify-between items-center">
+                <span>Registrado como:</span>
+                {getPaymentBadge(selectedSale.paymentMethod)}
+              </div>
+
+              {isMixedSale(selectedSale) && (
+                <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-1 text-xs">
+                  <span className="text-[10px] font-black uppercase text-amber-800 block mb-1">
+                    Desglose de Pago Mixto:
+                  </span>
+                  {selectedSale.paymentBreakdown.map((b, i) => (
+                    <div key={b.id || i} className="flex justify-between font-semibold text-slate-700">
+                      <span>
+                        {b.method === 'cash'
+                          ? '💵 Efectivo'
+                          : b.method === 'card'
+                          ? '💳 Tarjeta'
+                          : b.method === 'transfer'
+                          ? '🏦 Transferencia'
+                          : b.method === 'credit'
+                          ? '👥 Crédito'
+                          : '🏷️ Nota de Crédito'}
+                        :
                       </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-150 flex justify-between items-center">
-                  <span>Registrado como:</span>
-                  {getPaymentBadge(selectedSale.paymentMethod)}
+                      <span>RD$ {b.amount.toFixed(2)}</span>
+                    </div>
+                  ))}
                 </div>
-                {isMixedSale(selectedSale) && (
-                  <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-1 text-xs">
-                    <span className="text-[10px] font-black uppercase text-amber-800 block mb-1">
-                      Desglose de Pago Mixto:
-                    </span>
-                    {selectedSale.paymentBreakdown.map((b, i) => (
-                      <div key={b.id || i} className="flex justify-between font-semibold text-slate-700">
-                        <span>
-                          {b.method === 'cash'
-                            ? '💵 Efectivo'
-                            : b.method === 'card'
-                            ? '💳 Tarjeta'
-                            : b.method === 'transfer'
-                            ? '🏦 Transferencia'
-                            : b.method === 'credit'
-                            ? '👥 Crédito'
-                            : '🏷️ Nota de Crédito'}
-                          :
-                        </span>
-                        <span>RD$ {b.amount.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* 3. ITEM-BY-ITEM RETURNS */}

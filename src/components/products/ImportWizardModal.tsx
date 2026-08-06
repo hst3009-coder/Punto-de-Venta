@@ -617,3 +617,5 @@ export const ImportWizardModal: React.FC<ImportWizardModalProps> = ({
     </div>
   );
 };
+
+export default ImportWizardModal;

@@ -16,13 +16,19 @@ function lazyWithRetry(componentImport: () => Promise<any>, exportName?: string)
   return React.lazy(async () => {
     try {
       const m = await componentImport();
-      return { default: exportName ? m[exportName] : (m.default || m) };
+      const comp = exportName
+        ? (m[exportName] || m.default?.[exportName] || m.default || m)
+        : (m.default || m);
+      return { default: comp };
     } catch (error) {
       console.warn('Dynamic import failed, retrying...', error);
       try {
         await new Promise(resolve => setTimeout(resolve, 300));
         const m = await componentImport();
-        return { default: exportName ? m[exportName] : (m.default || m) };
+        const comp = exportName
+          ? (m[exportName] || m.default?.[exportName] || m.default || m)
+          : (m.default || m);
+        return { default: comp };
       } catch (retryErr) {
         throw retryErr;
       }
@@ -747,3 +753,5 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({
     </div>
   );
 };
+
+export default CatalogTab;

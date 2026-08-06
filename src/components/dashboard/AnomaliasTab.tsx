@@ -111,7 +111,7 @@ export const AnomaliasTab: React.FC<AnomaliasTabProps> = ({
                 <ShieldAlert className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                <h2 className="text-sm sm:text-base md:text-lg font-black text-slate-900 uppercase tracking-tight">
                   Anomalías Operativas
                 </h2>
                 <p className="text-xs text-slate-400 font-semibold mt-0.5">
@@ -150,7 +150,7 @@ export const AnomaliasTab: React.FC<AnomaliasTabProps> = ({
                 <RotateCcw className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-tight">
                   Tasa Alta de Devoluciones y Anulaciones (Últimos 30 días)
                 </h3>
                 <p className="text-xs text-slate-400 font-semibold">

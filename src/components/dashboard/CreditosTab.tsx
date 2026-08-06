@@ -94,8 +94,8 @@ export const CreditosTab: React.FC<CreditosTabProps> = ({
       {/* Header KPI Card */}
       <div className="bg-rose-600 p-8 rounded-3xl shadow-xl text-white relative overflow-hidden">
         <div className="relative z-10">
-          <h3 className="text-xs font-black uppercase opacity-80 tracking-widest mb-2">Cartera de Deuda Total</h3>
-          <span className="text-4xl font-black font-mono">
+          <h3 className="text-[10px] sm:text-xs font-black uppercase opacity-80 tracking-widest mb-2">Cartera de Deuda Total</h3>
+          <span className="text-2xl sm:text-4xl font-black font-mono">
             RD$ {totalOutstandingCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
           </span>
           <p className="text-xs mt-4 opacity-70 font-medium">Saldo pendiente global de todos los clientes activos.</p>
@@ -107,7 +107,7 @@ export const CreditosTab: React.FC<CreditosTabProps> = ({
         {/* Ranking de Clientes */}
         <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs">
           <div className="mb-6">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Ranking de Deudores</h3>
+            <h3 className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-wider">Ranking de Deudores</h3>
             <p className="text-[10px] text-slate-400 font-bold uppercase">Clientes con saldo pendiente actual</p>
           </div>
 
@@ -125,7 +125,7 @@ export const CreditosTab: React.FC<CreditosTabProps> = ({
         {/* Log de Abonos */}
         <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs">
           <div className="mb-6">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Últimos Abonos Recibidos</h3>
+            <h3 className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-wider">Últimos Abonos Recibidos</h3>
             <p className="text-[10px] text-slate-400 font-bold uppercase">Registro histórico global</p>
           </div>
 

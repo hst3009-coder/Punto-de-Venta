@@ -30,7 +30,7 @@ export const EstadoResultadosTab: React.FC<EstadoResultadosTabProps> = ({
       <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
-            <h3 className="text-base font-black text-slate-800 uppercase tracking-wide">Estado de Resultados (P&L)</h3>
+            <h3 className="text-xs sm:text-sm md:text-base font-black text-slate-800 uppercase tracking-wide">Estado de Resultados (P&L)</h3>
             <p className="text-xs text-slate-400">Análisis detallado de ingresos, costos y utilidad operativa del período seleccionado</p>
           </div>
           <button

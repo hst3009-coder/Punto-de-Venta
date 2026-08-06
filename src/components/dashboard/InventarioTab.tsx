@@ -81,7 +81,7 @@ export const InventarioTab: React.FC<InventarioTabProps> = ({
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs">
             <div className="mb-6">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Clasificación ABC</h3>
+              <h3 className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-wider">Clasificación ABC</h3>
               <p className="text-[10px] text-slate-400 font-bold uppercase">Basado en ventas (90 días)</p>
             </div>
 
@@ -126,7 +126,7 @@ export const InventarioTab: React.FC<InventarioTabProps> = ({
           {/* Inventory Value by Category */}
           <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs">
             <div className="mb-6">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Valor por Categoría</h3>
+              <h3 className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-wider">Valor por Categoría</h3>
               <p className="text-[10px] text-slate-400 font-bold uppercase">Distribución del capital</p>
             </div>
             <div className="space-y-3">
@@ -154,7 +154,7 @@ export const InventarioTab: React.FC<InventarioTabProps> = ({
         {/* ABC Product Table */}
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl shadow-xs overflow-hidden flex flex-col">
           <div className="p-6 border-b border-slate-100">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">Catálogo y Clasificación ABC</h3>
+            <h3 className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-wider">Catálogo y Clasificación ABC</h3>
             <p className="text-[10px] text-slate-400 font-bold uppercase">Análisis de rentabilidad y stock</p>
           </div>
           <div className="flex-1 max-h-[600px] overflow-y-auto">

@@ -105,7 +105,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
     setActiveChartIndex(index);
   };
 
-  // Carousel 2 State (Reports & Alerts: 3 slides)
+  // Carousel 2 State (Reports & Alerts: 2 slides)
   const carousel2Ref = useRef<HTMLDivElement>(null);
   const [activeCarousel2Page, setActiveCarousel2Page] = useState(0);
 
@@ -114,7 +114,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
     const width = carousel2Ref.current.clientWidth;
     if (width > 0) {
       const newPage = Math.round(carousel2Ref.current.scrollLeft / width);
-      if (newPage !== activeCarousel2Page && newPage >= 0 && newPage < 3) {
+      if (newPage !== activeCarousel2Page && newPage >= 0 && newPage < 2) {
         setActiveCarousel2Page(newPage);
       }
     }
@@ -430,19 +430,17 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
         </div>
       </div>
 
-      {/* 3. CARRUSEL 2: Reabastecer solo (1 panel) + resto en pares de 2 (3 slides totales) */}
+      {/* 3. CARRUSEL 2: Reabastecer solo (1 panel) + 4 alertas operacionales en cuadrícula 2x2 (2 slides totales) */}
       <div className="space-y-3 pt-2">
         <div className="flex items-center justify-between px-1 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black uppercase text-slate-800 tracking-wider">
               {activeCarousel2Page === 0
                 ? 'Qué Reabastecer (Stock Bajo y Sugerencias)'
-                : activeCarousel2Page === 1
-                ? 'Clientes con Crédito Excedido & Cuentas por Pagar'
-                : 'Discrepancias Terminal & Productos Bajo Margen'}
+                : 'Alertas Operativas (Créditos, Cuentas x Pagar, Terminal y Margen)'}
             </span>
             <span className="text-[10px] text-slate-400 font-bold uppercase">
-              ({activeCarousel2Page + 1} de 3)
+              ({activeCarousel2Page + 1} de 2)
             </span>
           </div>
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-full border border-slate-200/60 overflow-x-auto">
@@ -462,16 +460,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
                 activeCarousel2Page === 1 ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Créditos / Por Pagar
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToCarousel2Page(2)}
-              className={`px-3 py-1 text-[10px] font-black rounded-full transition-all cursor-pointer whitespace-nowrap ${
-                activeCarousel2Page === 2 ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Terminal / Márgenes
+              Alertas Operativas
             </button>
           </div>
         </div>
@@ -493,9 +482,9 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
             />
           </div>
 
-          {/* Slide 2: Combined Slide (Clientes con Crédito Excedido + Cuentas por Pagar Próximas a Vencer) */}
+          {/* Slide 2: Combined 4 Alert Cards Slide in a 2x2 Grid (1 col on mobile, 2 cols on md+) */}
           <div className="w-full shrink-0 snap-start grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 items-start">
-            {/* Alert Card: Clientes con Crédito Excedido */}
+            {/* Alert Card 1: Clientes con Crédito Excedido */}
             <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-3xl shadow-2xs flex flex-col h-fit space-y-3">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -537,7 +526,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
               </button>
             </div>
 
-            {/* Alert Card: Cuentas por Pagar Próximas a Vencer */}
+            {/* Alert Card 2: Cuentas por Pagar Próximas a Vencer */}
             <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-3xl shadow-2xs flex flex-col h-fit space-y-3">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -587,11 +576,8 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
 
-          {/* Slide 3: Combined Slide (Discrepancias de Terminal de Tarjetas + Productos por Debajo del Margen Objetivo) */}
-          <div className="w-full shrink-0 snap-start grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 items-start">
-            {/* Alert Card: Discrepancias de Terminal de Tarjetas */}
+            {/* Alert Card 3: Discrepancias de Terminal de Tarjetas */}
             <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-3xl shadow-2xs flex flex-col h-fit space-y-3">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -636,7 +622,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
               </button>
             </div>
 
-            {/* Alert Card: Productos por Debajo del Margen Objetivo */}
+            {/* Alert Card 4: Productos por Debajo del Margen Objetivo */}
             <div className="bg-white border border-slate-200/80 p-5 sm:p-6 rounded-3xl shadow-2xs flex flex-col h-fit space-y-3">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -680,9 +666,9 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
           </div>
         </div>
 
-        {/* Carousel 2 Indicator Dots (3 dots) */}
+        {/* Carousel 2 Indicator Dots (2 dots) */}
         <div className="flex items-center justify-center gap-2 pt-1">
-          {[0, 1, 2].map((idx) => (
+          {[0, 1].map((idx) => (
             <button
               key={idx}
               type="button"

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Sale, Product, PaymentMethod, StoreIdentity, CartItem, Employee, Closure, CustomerRefund, CreditNote, DashboardConfig } from '../types';
+import { Sale, Product, PaymentMethod, StoreIdentity, CartItem, Employee, Closure, CustomerRefund, CreditNote, DashboardConfig, Customer } from '../types';
 import { X, Receipt } from 'lucide-react';
 import { firestoreService } from '../lib/firebase';
 import { increment } from 'firebase/firestore';
@@ -10,6 +10,7 @@ import { TicketsSearchList } from './tickets/TicketsSearchList';
 import { CancelSaleFlow } from './tickets/CancelSaleFlow';
 import { ReturnItemFlow } from './tickets/ReturnItemFlow';
 import { ReprintView } from './tickets/ReprintView';
+import { EditPaymentModal } from './tickets/EditPaymentModal';
 
 interface TicketsModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ interface TicketsModalProps {
   clerkName: string;
   currentEmployee: Employee | null;
   closures: Closure[];
+  customers?: Customer[];
   customerRefunds?: CustomerRefund[];
   onAddCustomerRefund?: (refund: CustomerRefund) => void;
   creditNotes?: CreditNote[];
@@ -40,6 +42,7 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
   clerkName,
   currentEmployee,
   closures,
+  customers = [],
   customerRefunds = [],
   onAddCustomerRefund,
   creditNotes = [],
@@ -296,24 +299,23 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
     }
   };
 
-  // Handle Edit Payment Method
-  const handleUpdatePaymentMethod = async (method: PaymentMethod) => {
-    if (!selectedSale) return;
+  // Handle Edit Payment and Customer
+  const handleSaveEditedPayment = async (updatedSale: Sale) => {
+    const operations = [
+      {
+        type: 'set' as const,
+        collectionName: 'sales',
+        id: updatedSale.id,
+        data: updatedSale,
+        merge: false,
+      },
+    ];
 
-    const updatedSale = {
-      ...selectedSale,
-      paymentMethod: method,
-    };
+    await firestoreService.runBatch(operations);
 
-    const updatedSales = salesHistory.map((s) => (s.id === selectedSale.id ? updatedSale : s));
+    const updatedSales = salesHistory.map((s) => (s.id === updatedSale.id ? updatedSale : s));
     onUpdateSalesHistory(updatedSales);
     localStorage.setItem('pos_sales', JSON.stringify(updatedSales));
-
-    try {
-      await firestoreService.setDocWithId('sales', selectedSale.id, updatedSale);
-    } catch (err) {
-      console.error('Error saving payment method edit to Firestore:', err);
-    }
 
     setSelectedSale(updatedSale);
     setIsEditingPayment(false);
@@ -613,14 +615,25 @@ export const TicketsModal: React.FC<TicketsModalProps> = ({
             clerkName={clerkName}
             storeIdentity={storeIdentity}
             dashboardConfig={dashboardConfig}
+            customers={customers}
+            closures={closures}
             isEditingPayment={isEditingPayment}
             setIsEditingPayment={setIsEditingPayment}
-            handleUpdatePaymentMethod={handleUpdatePaymentMethod}
             getPaymentBadge={getPaymentBadge}
             handleOpenItemReturn={handleOpenItemReturn}
           />
         </div>
       </div>
+
+      <EditPaymentModal
+        isOpen={isEditingPayment}
+        onClose={() => setIsEditingPayment(false)}
+        selectedSale={selectedSale}
+        customers={customers}
+        products={products}
+        dashboardConfig={dashboardConfig}
+        onSavePayment={handleSaveEditedPayment}
+      />
 
       <CancelSaleFlow
         isCancelling={isCancelling}
